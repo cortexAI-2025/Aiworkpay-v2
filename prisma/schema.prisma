@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PAYWORKER
+  ADMIN
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum MissionStatus {
+  CREATED
+  PUBLISHED
+  ASSIGNED
+  IN_PROGRESS
+  DELIVERED
+  COMPLETED
+  CANCELED
+}
+
+enum TransactionType {
+  SUBSCRIPTION
+  MISSION_PAYOUT
+  PLATFORM_FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  CANCELED
+}
+
+model User {
+  id                   String        @id @default(uuid())
+  email                String        @unique
+  password             String
+  role                 Role          @default(PAYWORKER)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripeAccountId      String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  apiKeys              ApiKey[]
+  missionsCreated      Mission[]     @relation("MissionCreatedByUser")
+  missionsAssigned     Mission[]     @relation("MissionAssignedTo")
+  transactions         Transaction[]
+  subscription         Subscription?
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  label     String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  createdByUserId String?
+  createdBy       User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  missions Mission[]
+}
+
+model Mission {
+  id               String          @id @default(uuid())
+  title            String
+  description      String
+  budget           Decimal         @db.Decimal(10, 2)
+  currency         String          @default("EUR")
+  deadline         DateTime
+  priority         Priority        @default(MEDIUM)
+  status           MissionStatus   @default(CREATED)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  createdByApiKeyId String?
+  createdByApiKey   ApiKey?         @relation(fields: [createdByApiKeyId], references: [id], onDelete: SetNull)
+
+  createdByUserId String?
+  createdByUser   User?           @relation("MissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  assignedToUserId String?
+  assignedTo       User?           @relation("MissionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  attachments  MissionAttachment[]
+  transactions Transaction[]
+}
+
+model MissionAttachment {
+  id        String   @id @default(uuid())
+  url       String
+  filename  String
+  mimeType  String?
+  size      Int?
+  createdAt DateTime @default(now())
+
+  missionId String
+  mission   Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id                    String            @id @default(uuid())
+  amount                Decimal           @db.Decimal(10, 2)
+  currency              String            @default("EUR")
+  type                  TransactionType
+  status                TransactionStatus @default(PENDING)
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  createdAt             DateTime          @default(now())
+
+  missionId String?
+  mission   Mission? @relation(fields: [missionId], references: [id], onDelete: SetNull)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                 String             @id @default(uuid())
+  status             SubscriptionStatus @default(INACTIVE)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

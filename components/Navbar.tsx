@@ -1,25 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { useState } from 'react';
 
 interface NavbarProps {
-  user?: {
-    email: string;
-    role: string;
-  } | null;
+  user?: { email: string; role: string } | null;
 }
 
 export default function Navbar({ user }: NavbarProps) {
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-    router.refresh();
-  };
+  const handleLogout = () => signOut({ callbackUrl: '/login' });
 
   return (
     <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
@@ -37,66 +29,28 @@ export default function Navbar({ user }: NavbarProps) {
           <div className="hidden md:flex items-center space-x-6">
             {user ? (
               <>
-                <Link
-                  href="/dashboard"
-                  className="text-gray-600 hover:text-brand transition-colors font-medium"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/dashboard/missions"
-                  className="text-gray-600 hover:text-brand transition-colors font-medium"
-                >
-                  Missions
-                </Link>
-                <Link
-                  href="/dashboard/transactions"
-                  className="text-gray-600 hover:text-brand transition-colors font-medium"
-                >
-                  Transactions
-                </Link>
-                <Link
-                  href="/dashboard/account"
-                  className="text-gray-600 hover:text-brand transition-colors font-medium"
-                >
-                  Mon compte
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="btn-secondary text-sm py-2 px-4"
-                >
-                  Déconnexion
-                </button>
+                <Link href="/dashboard" className="text-gray-600 hover:text-brand transition-colors font-medium">Dashboard</Link>
+                <Link href="/dashboard/missions" className="text-gray-600 hover:text-brand transition-colors font-medium">Missions</Link>
+                <Link href="/dashboard/transactions" className="text-gray-600 hover:text-brand transition-colors font-medium">Transactions</Link>
+                <Link href="/dashboard/account" className="text-gray-600 hover:text-brand transition-colors font-medium">Mon compte</Link>
+                <button onClick={handleLogout} className="btn-secondary text-sm py-2 px-4">Déconnexion</button>
               </>
             ) : (
               <>
-                <Link href="/pricing" className="text-gray-600 hover:text-brand transition-colors font-medium">
-                  Tarifs
-                </Link>
-                <Link href="/contact" className="text-gray-600 hover:text-brand transition-colors font-medium">
-                  Contact
-                </Link>
-                <Link href="/login" className="btn-secondary text-sm py-2 px-4">
-                  Connexion
-                </Link>
-                <Link href="/signup" className="btn-primary text-sm py-2 px-4">
-                  Commencer
-                </Link>
+                <Link href="/pricing" className="text-gray-600 hover:text-brand transition-colors font-medium">Tarifs</Link>
+                <Link href="/contact" className="text-gray-600 hover:text-brand transition-colors font-medium">Contact</Link>
+                <Link href="/login" className="btn-secondary text-sm py-2 px-4">Connexion</Link>
+                <Link href="/signup" className="btn-primary text-sm py-2 px-4">Commencer</Link>
               </>
             )}
           </div>
 
           {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
+          <button className="md:hidden p-2 rounded-lg hover:bg-gray-100" onClick={() => setMenuOpen(!menuOpen)}>
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {menuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
+              {menuOpen
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
             </svg>
           </button>
         </div>

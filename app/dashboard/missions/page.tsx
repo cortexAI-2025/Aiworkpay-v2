@@ -1,4 +1,4 @@
-import { getSession } from '@/lib/auth';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import MissionCard from '@/components/MissionCard';
 import Link from 'next/link';
@@ -7,7 +7,6 @@ interface SearchParams {
   status?: string;
   priority?: string;
   minBudget?: string;
-  currency?: string;
 }
 
 export default async function MissionsPage({
@@ -15,8 +14,8 @@ export default async function MissionsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const session = await getSession();
-  if (!session) return null;
+  const session = await auth();
+  if (!session?.user) return null;
 
   const params = await searchParams;
 
@@ -28,13 +27,8 @@ export default async function MissionsPage({
     where.status = { in: ['PUBLISHED', 'ASSIGNED', 'IN_PROGRESS', 'DELIVERED'] };
   }
 
-  if (params.priority) {
-    where.priority = params.priority;
-  }
-
-  if (params.minBudget) {
-    where.budget = { gte: parseFloat(params.minBudget) };
-  }
+  if (params.priority) where.priority = params.priority;
+  if (params.minBudget) where.budget = { gte: parseFloat(params.minBudget) };
 
   const missions = await prisma.mission.findMany({
     where,
@@ -82,16 +76,11 @@ export default async function MissionsPage({
               className="input py-2 text-sm w-32"
             />
           </div>
-          <button type="submit" className="btn-primary py-2 px-4 text-sm">
-            Filtrer
-          </button>
-          <Link href="/dashboard/missions" className="btn-secondary py-2 px-4 text-sm">
-            Réinitialiser
-          </Link>
+          <button type="submit" className="btn-primary py-2 px-4 text-sm">Filtrer</button>
+          <Link href="/dashboard/missions" className="btn-secondary py-2 px-4 text-sm">Réinitialiser</Link>
         </form>
       </div>
 
-      {/* Missions grid */}
       {missions.length === 0 ? (
         <div className="card text-center py-16">
           <div className="text-4xl mb-4">📭</div>
@@ -105,11 +94,7 @@ export default async function MissionsPage({
           {missions.map((m) => (
             <MissionCard
               key={m.id}
-              mission={{
-                ...m,
-                budget: m.budget.toString(),
-                deadline: m.deadline.toISOString(),
-              }}
+              mission={{ ...m, budget: m.budget.toString(), deadline: m.deadline.toISOString() }}
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { getSession } from '@/lib/auth';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -11,10 +11,12 @@ const priorityColor: Record<string, string> = {
   HIGH: 'bg-red-100 text-red-800',
 };
 const statusLabels: Record<string, string> = {
+  PAYMENT_PENDING: 'Paiement en attente',
   CREATED: 'Créée', PUBLISHED: 'Publiée', ASSIGNED: 'Assignée',
   IN_PROGRESS: 'En cours', DELIVERED: 'Livrée', COMPLETED: 'Terminée', CANCELED: 'Annulée',
 };
 const statusColors: Record<string, string> = {
+  PAYMENT_PENDING: 'bg-orange-100 text-orange-700',
   CREATED: 'bg-gray-100 text-gray-700', PUBLISHED: 'bg-blue-100 text-blue-700',
   ASSIGNED: 'bg-purple-100 text-purple-700', IN_PROGRESS: 'bg-yellow-100 text-yellow-700',
   DELIVERED: 'bg-orange-100 text-orange-700', COMPLETED: 'bg-green-100 text-green-700',
@@ -26,8 +28,8 @@ export default async function MissionDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await getSession();
-  if (!session) return null;
+  const session = await auth();
+  if (!session?.user) return null;
 
   const { id } = await params;
 
@@ -41,21 +43,25 @@ export default async function MissionDetailPage({
       },
     }),
     prisma.user.findUnique({
-      where: { id: session.sub },
-      include: { subscription: true },
+      where: { id: session.user.id },
+      select: { stripeAccountOnboarded: true },
     }),
   ]);
 
   if (!mission) notFound();
 
-  const isAssignedToMe = mission.assignedToUserId === session.sub;
-  const isActive = user?.subscription?.status === 'ACTIVE';
+  const isAssignedToMe = mission.assignedToUserId === session.user.id;
   const deadlineDate = new Date(mission.deadline);
-  const isOverdue = deadlineDate < new Date();
+  const isOverdue = deadlineDate < new Date() && !['COMPLETED', 'CANCELED'].includes(mission.status);
+
+  // Show 90/10 breakdown to assignee
+  const showCommission = isAssignedToMe && Number(mission.budget) > 0;
+  const payworkerEarning = showCommission
+    ? parseFloat((Number(mission.budget) * 0.9).toFixed(2))
+    : 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Back */}
       <Link href="/dashboard/missions" className="text-sm text-gray-500 hover:text-brand transition-colors flex items-center">
         <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -81,11 +87,15 @@ export default async function MissionDetailPage({
             <div className="text-3xl font-extrabold text-green-600">
               {Number(mission.budget).toLocaleString('fr-FR')} {mission.currency}
             </div>
-            <div className="text-sm text-gray-500">Budget</div>
+            {showCommission && (
+              <div className="text-sm text-green-700 font-medium mt-1">
+                Vous recevez : {payworkerEarning.toLocaleString('fr-FR')} {mission.currency}
+                <span className="text-xs text-gray-400 ml-1">(90 %)</span>
+              </div>
+            )}
           </div>
         </div>
-
-        <div className="prose max-w-none text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
+        <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
           {mission.description}
         </div>
       </div>
@@ -95,8 +105,9 @@ export default async function MissionDetailPage({
         <div className="card text-center">
           <div className="text-2xl mb-1">📅</div>
           <div className="text-xs text-gray-500 mb-1">Date limite</div>
-          <div className={`font-semibold text-sm ${isOverdue && mission.status !== 'COMPLETED' ? 'text-red-600' : 'text-gray-900'}`}>
+          <div className={`font-semibold text-sm ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
             {deadlineDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {isOverdue && ' ⚠️'}
           </div>
         </div>
         <div className="card text-center">
@@ -130,9 +141,7 @@ export default async function MissionDetailPage({
               >
                 <span className="text-xl mr-3">📎</span>
                 <span className="text-sm text-gray-700 flex-1">{att.filename}</span>
-                {att.size && (
-                  <span className="text-xs text-gray-400">{(att.size / 1024).toFixed(1)} KB</span>
-                )}
+                {att.size && <span className="text-xs text-gray-400">{(att.size / 1024).toFixed(1)} KB</span>}
               </a>
             ))}
           </div>
@@ -141,14 +150,10 @@ export default async function MissionDetailPage({
 
       {/* Actions */}
       <MissionActions
-        mission={{
-          id: mission.id,
-          status: mission.status,
-          assignedToUserId: mission.assignedToUserId,
-        }}
-        userId={session.sub}
-        isActive={isActive}
+        mission={{ id: mission.id, status: mission.status, assignedToUserId: mission.assignedToUserId }}
+        userId={session.user.id}
         isAssignedToMe={isAssignedToMe}
+        stripeConnected={user?.stripeAccountOnboarded ?? false}
       />
     </div>
   );

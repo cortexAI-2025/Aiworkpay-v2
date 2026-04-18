@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
   }
 
   let event: Stripe.Event;
-
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err) {
@@ -27,35 +26,23 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (event.type) {
-      case 'checkout.session.completed': {
-        const checkoutSession = event.data.object as Stripe.Checkout.Session;
-        if (checkoutSession.mode === 'subscription') {
-          await handleSubscriptionCreated(checkoutSession);
-        }
+      // ── Agent pays for a mission ──────────────────────────────────────────
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        await handleMissionPaymentSucceeded(pi);
         break;
       }
 
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionUpdated(subscription);
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        await handleMissionPaymentFailed(pi);
         break;
       }
 
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionDeleted(subscription);
-        break;
-      }
-
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice;
-        await handleInvoicePaymentSucceeded(invoice);
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        await handleInvoicePaymentFailed(invoice);
+      // ── Connect: payout to Payworker confirmed ────────────────────────────
+      case 'transfer.created': {
+        const transfer = event.data.object as Stripe.Transfer;
+        await handleTransferCreated(transfer);
         break;
       }
 
@@ -70,121 +57,73 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleSubscriptionCreated(checkoutSession: Stripe.Checkout.Session) {
-  const userId = checkoutSession.metadata?.userId;
-  if (!userId) return;
+// ─── Handlers ────────────────────────────────────────────────────────────────
 
-  const subscriptionId = checkoutSession.subscription as string;
-  const customerId = checkoutSession.customer as string;
+async function handleMissionPaymentSucceeded(pi: Stripe.PaymentIntent) {
+  const missionId = pi.metadata?.missionId;
+  if (!missionId) return;
 
-  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const mission = await prisma.mission.findUnique({ where: { id: missionId } });
+  if (!mission || mission.status !== 'PAYMENT_PENDING') return;
 
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: userId },
+  // Publish the mission — payment confirmed
+  await prisma.mission.update({
+    where: { id: missionId },
+    data: { status: 'PUBLISHED' },
+  });
+
+  // Determine which user to associate with the AGENT_PAYMENT transaction.
+  // Use the creator user if available, otherwise find via apiKey owner.
+  let userId = mission.createdByUserId;
+  if (!userId && mission.createdByApiKeyId) {
+    const apiKey = await prisma.apiKey.findUnique({
+      where: { id: mission.createdByApiKeyId },
+      select: { createdByUserId: true },
+    });
+    userId = apiKey?.createdByUserId ?? null;
+  }
+
+  // Only create a transaction when we have a traceable user
+  if (userId) {
+    await prisma.transaction.create({
       data: {
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscriptionId,
-      },
-    }),
-    prisma.subscription.upsert({
-      where: { userId },
-      create: {
+        missionId,
         userId,
-        status: stripeSubscription.status === 'active' ? 'ACTIVE' : 'INACTIVE',
-        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-      },
-      update: {
-        status: stripeSubscription.status === 'active' ? 'ACTIVE' : 'INACTIVE',
-        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-      },
-    }),
-    prisma.transaction.create({
-      data: {
-        userId,
-        amount: (checkoutSession.amount_total || 1000) / 100,
-        currency: (checkoutSession.currency || 'eur').toUpperCase(),
-        type: 'SUBSCRIPTION',
+        amount: pi.amount / 100,
+        currency: pi.currency.toUpperCase(),
+        type: 'AGENT_PAYMENT',
         status: 'SUCCEEDED',
-        stripePaymentIntentId: checkoutSession.payment_intent as string | undefined,
+        stripePaymentIntentId: pi.id,
+        stripeChargeId: typeof pi.latest_charge === 'string' ? pi.latest_charge : undefined,
       },
-    }),
-  ]);
+    });
+  }
 }
 
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  const user = await prisma.user.findFirst({
-    where: { stripeSubscriptionId: subscription.id },
-  });
+async function handleMissionPaymentFailed(pi: Stripe.PaymentIntent) {
+  const missionId = pi.metadata?.missionId;
+  if (!missionId) return;
 
-  if (!user) return;
-
-  let status: 'ACTIVE' | 'INACTIVE' | 'CANCELED' = 'INACTIVE';
-  if (subscription.status === 'active') status = 'ACTIVE';
-  else if (subscription.status === 'canceled') status = 'CANCELED';
-
-  await prisma.subscription.upsert({
-    where: { userId: user.id },
-    create: {
-      userId: user.id,
-      status,
-      currentPeriodStart: new Date(subscription.current_period_start * 1000),
-      currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-    },
-    update: {
-      status,
-      currentPeriodStart: new Date(subscription.current_period_start * 1000),
-      currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-    },
-  });
-}
-
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  const user = await prisma.user.findFirst({
-    where: { stripeSubscriptionId: subscription.id },
-  });
-
-  if (!user) return;
-
-  await prisma.subscription.update({
-    where: { userId: user.id },
+  await prisma.mission.update({
+    where: { id: missionId },
     data: { status: 'CANCELED' },
   });
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { stripeSubscriptionId: null },
-  });
 }
 
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-  if (!invoice.customer || !invoice.subscription) return;
+async function handleTransferCreated(transfer: Stripe.Transfer) {
+  const missionId = transfer.metadata?.missionId;
+  if (!missionId) return;
 
-  const user = await prisma.user.findFirst({
-    where: { stripeCustomerId: invoice.customer as string },
-  });
-
-  if (!user) return;
-
-  await prisma.subscription.updateMany({
-    where: { userId: user.id },
-    data: { status: 'ACTIVE' },
-  });
-}
-
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  if (!invoice.customer) return;
-
-  const user = await prisma.user.findFirst({
-    where: { stripeCustomerId: invoice.customer as string },
-  });
-
-  if (!user) return;
-
-  await prisma.subscription.updateMany({
-    where: { userId: user.id },
-    data: { status: 'INACTIVE' },
+  // Mark the PAYWORKER_PAYOUT transaction as SUCCEEDED when we have a transfer ID
+  await prisma.transaction.updateMany({
+    where: {
+      missionId,
+      type: 'PAYWORKER_PAYOUT',
+      status: 'PENDING',
+    },
+    data: {
+      status: 'SUCCEEDED',
+      stripeTransferId: transfer.id,
+    },
   });
 }

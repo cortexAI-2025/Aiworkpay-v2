@@ -19,6 +19,7 @@ enum Priority {
 }
 
 enum MissionStatus {
+  PAYMENT_PENDING
   CREATED
   PUBLISHED
   ASSIGNED
@@ -29,9 +30,12 @@ enum MissionStatus {
 }
 
 enum TransactionType {
+  AGENT_PAYMENT
+  PAYWORKER_PAYOUT
+  PLATFORM_FEE
+  // legacy
   SUBSCRIPTION
   MISSION_PAYOUT
-  PLATFORM_FEE
 }
 
 enum TransactionStatus {
@@ -46,57 +50,119 @@ enum SubscriptionStatus {
   CANCELED
 }
 
-model User {
-  id                   String        @id @default(uuid())
-  email                String        @unique
-  password             String
-  role                 Role          @default(PAYWORKER)
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
-  stripeAccountId      String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+// ─── NextAuth models ─────────────────────────────────────────────────────────
 
-  apiKeys              ApiKey[]
-  missionsCreated      Mission[]     @relation("MissionCreatedByUser")
-  missionsAssigned     Mission[]     @relation("MissionAssignedTo")
-  transactions         Transaction[]
-  subscription         Subscription?
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── App models ───────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // null for OAuth users
+  phone         String?   @unique
+  phoneVerified Boolean   @default(false)
+  role          Role      @default(PAYWORKER)
+
+  // Stripe Connect: payout account for Payworkers
+  stripeAccountId        String?
+  stripeAccountOnboarded Boolean @default(false)
+
+  // Legacy customer ID (may be set if user ever pays something)
+  stripeCustomerId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts         Account[]
+  sessions         Session[]
+  apiKeys          ApiKey[]
+  missionsCreated  Mission[]     @relation("MissionCreatedByUser")
+  missionsAssigned Mission[]     @relation("MissionAssignedTo")
+  transactions     Transaction[]
 }
 
 model ApiKey {
-  id        String    @id @default(uuid())
-  key       String    @unique
-  label     String
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  id    String  @id @default(uuid())
+  key   String  @unique
+  label String
+  active Boolean @default(true)
+
+  // Stripe: each agent (API key) has a Stripe customer for billing
+  stripeCustomerId String?
+
+  createdAt DateTime @default(now())
 
   createdByUserId String?
-  createdBy       User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdBy       User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   missions Mission[]
 }
 
 model Mission {
-  id               String          @id @default(uuid())
-  title            String
-  description      String
-  budget           Decimal         @db.Decimal(10, 2)
-  currency         String          @default("EUR")
-  deadline         DateTime
-  priority         Priority        @default(MEDIUM)
-  status           MissionStatus   @default(CREATED)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id          String        @id @default(uuid())
+  title       String
+  description String
+  budget      Decimal       @db.Decimal(10, 2)
+  currency    String        @default("EUR")
+  deadline    DateTime
+  priority    Priority      @default(MEDIUM)
+  status      MissionStatus @default(CREATED)
+
+  // Payment tracking (agent pays upfront)
+  stripePaymentIntentId String?
+
+  // Commission stored at time of completion
+  platformFeeAmount Decimal? @db.Decimal(10, 2) // 10 %
+  payworkerAmount   Decimal? @db.Decimal(10, 2) // 90 %
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   createdByApiKeyId String?
-  createdByApiKey   ApiKey?         @relation(fields: [createdByApiKeyId], references: [id], onDelete: SetNull)
+  createdByApiKey   ApiKey?  @relation(fields: [createdByApiKeyId], references: [id], onDelete: SetNull)
 
   createdByUserId String?
-  createdByUser   User?           @relation("MissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUser   User?    @relation("MissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   assignedToUserId String?
-  assignedTo       User?           @relation("MissionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedTo       User?    @relation("MissionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
 
   attachments  MissionAttachment[]
   transactions Transaction[]
@@ -122,23 +188,12 @@ model Transaction {
   status                TransactionStatus @default(PENDING)
   stripePaymentIntentId String?
   stripeChargeId        String?
+  stripeTransferId      String?
   createdAt             DateTime          @default(now())
 
   missionId String?
   mission   Mission? @relation(fields: [missionId], references: [id], onDelete: SetNull)
 
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Subscription {
-  id                 String             @id @default(uuid())
-  status             SubscriptionStatus @default(INACTIVE)
-  currentPeriodStart DateTime?
-  currentPeriodEnd   DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-
-  userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -1,40 +1,28 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getSessionFromRequest } from './lib/auth';
 
-const protectedPaths = ['/dashboard'];
-const authPaths = ['/login', '/signup', '/reset-password'];
+export default auth((req) => {
+  const { nextUrl, auth: session } = req;
+  const isLoggedIn = !!session?.user;
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  const isProtected = protectedPaths.some((path) => pathname.startsWith(path));
-  const isAuthPage = authPaths.some((path) => pathname.startsWith(path));
-
-  if (isProtected) {
-    const session = await getSessionFromRequest(request);
-    if (!session) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('from', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  // Protect /dashboard routes
+  if (nextUrl.pathname.startsWith('/dashboard') && !isLoggedIn) {
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('from', nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthPage) {
-    const session = await getSessionFromRequest(request);
-    if (session) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
+  // Redirect logged-in users away from auth pages
+  if (
+    isLoggedIn &&
+    (nextUrl.pathname === '/login' || nextUrl.pathname === '/signup')
+  ) {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/login',
-    '/signup',
-    '/reset-password',
-  ],
+  matcher: ['/dashboard/:path*', '/login', '/signup'],
 };

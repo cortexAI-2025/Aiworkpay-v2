@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import SessionProviderWrapper from '@/components/SessionProviderWrapper';
 
 export const metadata: Metadata = {
   title: 'Aiworkpay – AI + Human Workforce on Demand',
@@ -23,7 +24,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="bg-gray-50 text-gray-900 antialiased">{children}</body>
+      <body className="bg-gray-50 text-gray-900 antialiased">
+        <SessionProviderWrapper>{children}</SessionProviderWrapper>
+      </body>
     </html>
   );
 }

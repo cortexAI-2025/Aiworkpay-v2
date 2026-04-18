@@ -1,10 +1,12 @@
-import { getSession } from '@/lib/auth';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 
 const typeLabels: Record<string, string> = {
+  AGENT_PAYMENT: 'Paiement agent',
+  PAYWORKER_PAYOUT: 'Virement Payworker',
+  PLATFORM_FEE: 'Commission plateforme',
   SUBSCRIPTION: 'Abonnement',
   MISSION_PAYOUT: 'Paiement mission',
-  PLATFORM_FEE: 'Commission plateforme',
 };
 
 const statusColors: Record<string, string> = {
@@ -20,17 +22,23 @@ const statusLabels: Record<string, string> = {
 };
 
 export default async function TransactionsPage() {
-  const session = await getSession();
-  if (!session) return null;
+  const session = await auth();
+  if (!session?.user) return null;
+
+  const userId = session.user.id;
 
   const transactions = await prisma.transaction.findMany({
-    where: { userId: session.sub },
+    where: { userId },
     orderBy: { createdAt: 'desc' },
     include: { mission: { select: { title: true } } },
   });
 
   const totalEarned = transactions
-    .filter((t) => t.status === 'SUCCEEDED' && t.type === 'MISSION_PAYOUT')
+    .filter((t) => t.status === 'SUCCEEDED' && t.type === 'PAYWORKER_PAYOUT')
+    .reduce((acc, t) => acc + Number(t.amount), 0);
+
+  const pendingPayout = transactions
+    .filter((t) => t.status === 'PENDING' && t.type === 'PAYWORKER_PAYOUT')
     .reduce((acc, t) => acc + Number(t.amount), 0);
 
   return (
@@ -40,22 +48,23 @@ export default async function TransactionsPage() {
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Total gagné</div>
-          <div className="text-2xl font-bold text-green-600">{totalEarned.toLocaleString('fr-FR')} €</div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Transactions</div>
-          <div className="text-2xl font-bold text-gray-900">{transactions.length}</div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">En attente</div>
-          <div className="text-2xl font-bold text-yellow-600">
-            {transactions.filter((t) => t.status === 'PENDING').length}
+          <div className="text-sm text-gray-500 mb-1">Total perçu (90 %)</div>
+          <div className="text-2xl font-bold text-green-600">
+            {totalEarned.toLocaleString('fr-FR')} €
           </div>
+        </div>
+        <div className="card">
+          <div className="text-sm text-gray-500 mb-1">En attente de virement</div>
+          <div className="text-2xl font-bold text-yellow-600">
+            {pendingPayout.toLocaleString('fr-FR')} €
+          </div>
+        </div>
+        <div className="card">
+          <div className="text-sm text-gray-500 mb-1">Opérations</div>
+          <div className="text-2xl font-bold text-gray-900">{transactions.length}</div>
         </div>
       </div>
 
-      {/* Table */}
       {transactions.length === 0 ? (
         <div className="card text-center py-16">
           <div className="text-4xl mb-4">💳</div>

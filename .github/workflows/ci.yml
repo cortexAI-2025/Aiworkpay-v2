@@ -60,7 +60,6 @@ jobs:
       # ── Phase 6 — ESLint ──────────────────────────────────────────────────
       - name: Lint
         run: npm run lint -- --max-warnings=0
-        continue-on-error: true   # warnings non bloquantes en CI
 
       # ── Phase 7 — Next.js production build ───────────────────────────────
       - name: Build production bundle

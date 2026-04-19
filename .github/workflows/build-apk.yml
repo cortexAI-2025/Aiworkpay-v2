@@ -64,9 +64,9 @@ jobs:
         run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       # ── Build phases ──────────────────────────────────────────────────────
-      - name: Phase 1 — KSP annotation processing
+      - name: Phase 1 — Generate build config
         working-directory: android
-        run: ./gradlew kspDebugKotlin --build-cache --no-daemon
+        run: ./gradlew generateDebugBuildConfig --build-cache --no-daemon
 
       - name: Phase 2 — Kotlin compilation
         working-directory: android

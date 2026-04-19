@@ -89,31 +89,31 @@ jobs:
           retention-days: 7
 
       # ── Release keystore ──────────────────────────────────────────────────
-      - name: Generate CI keystore
+      - name: Generate CI keystore & write keystore.properties
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
+          KEY_ALIAS:         ${{ secrets.KEY_ALIAS         || 'aiworkpay'     }}
+          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}
         run: |
           keytool -genkeypair \
-            -alias aiworkpay \
+            -alias "$KEY_ALIAS" \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -keystore android/app/keystore.jks \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}" \
-            -keypass  "${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}" \
+            -storetype JKS \
+            -keystore app/keystore.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass   "$KEY_PASSWORD" \
             -dname "CN=Aiworkpay CI, OU=CI, O=Aiworkpay, L=Paris, S=IDF, C=FR" \
             -noprompt
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
-          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}
+          printf 'storeFile=app/keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
 
       # ── Signed release APK ────────────────────────────────────────────────
       - name: Build signed release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --no-configuration-cache
-        env:
-          KEYSTORE_PATH:     keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
-          KEY_ALIAS:         ${{ secrets.KEY_ALIAS         || 'aiworkpay'     }}
-          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
@@ -125,12 +125,7 @@ jobs:
       # ── Release AAB (Play Store) ──────────────────────────────────────────
       - name: Build release AAB
         working-directory: android
-        run: ./gradlew bundleRelease --no-daemon --no-configuration-cache
-        env:
-          KEYSTORE_PATH:     keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
-          KEY_ALIAS:         ${{ secrets.KEY_ALIAS         || 'aiworkpay'     }}
-          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}
+        run: ./gradlew bundleRelease --no-daemon
 
       - name: Upload release AAB
         uses: actions/upload-artifact@v4

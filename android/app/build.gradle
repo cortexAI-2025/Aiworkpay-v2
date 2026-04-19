@@ -3,6 +3,13 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Read signing credentials from keystore.properties written by CI
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace 'com.aiworkpay.app'
     compileSdk 35
@@ -20,11 +27,10 @@ android {
 
     signingConfigs {
         release {
-            // Set by CI via local.properties or env vars
-            storeFile     = file(System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-            keyAlias      = System.getenv("KEY_ALIAS")         ?: ""
-            keyPassword   = System.getenv("KEY_PASSWORD")      ?: ""
+            storeFile     file(keystoreProps['storeFile']     ?: 'keystore.jks')
+            storePassword (keystoreProps['storePassword']     ?: '')
+            keyAlias      (keystoreProps['keyAlias']          ?: '')
+            keyPassword   (keystoreProps['keyPassword']       ?: '')
         }
     }
 

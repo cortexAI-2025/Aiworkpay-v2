@@ -110,7 +110,7 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
         env:
-          KEYSTORE_PATH:     app/keystore.jks
+          KEYSTORE_PATH:     keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS         || 'aiworkpay'     }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}
@@ -127,7 +127,7 @@ jobs:
         working-directory: android
         run: ./gradlew bundleRelease --no-daemon
         env:
-          KEYSTORE_PATH:     app/keystore.jks
+          KEYSTORE_PATH:     keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS         || 'aiworkpay'     }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}

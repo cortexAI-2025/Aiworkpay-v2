@@ -1,0 +1,121 @@
+name: CI / Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'claude/**'
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    name: Build Next.js App
+    runs-on: ubuntu-latest
+
+    env:
+      # Minimal env vars needed to pass build without real secrets
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://placeholder:placeholder@localhost:5432/aiworkpay?schema=public' }}
+      NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL || 'http://localhost:3000' }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci-placeholder-secret-min-32-chars-ok' }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY || 'sk_test_placeholder' }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder' }}
+      NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID || 'placeholder' }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET || 'placeholder' }}
+      GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID || 'placeholder' }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET || 'placeholder' }}
+      FACEBOOK_CLIENT_ID: ${{ secrets.FACEBOOK_CLIENT_ID || 'placeholder' }}
+      FACEBOOK_CLIENT_SECRET: ${{ secrets.FACEBOOK_CLIENT_SECRET || 'placeholder' }}
+      APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID || 'placeholder' }}
+      APPLE_CLIENT_SECRET: ${{ secrets.APPLE_CLIENT_SECRET || 'placeholder' }}
+
+    steps:
+      # ── Phase 1 — Checkout ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Phase 2 — Node.js setup ───────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── Phase 3 — Install dependencies ────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Phase 4 — Generate Prisma client ──────────────────────────────────
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # ── Phase 5 — TypeScript check ────────────────────────────────────────
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      # ── Phase 6 — ESLint ──────────────────────────────────────────────────
+      - name: Lint
+        run: npm run lint -- --max-warnings=0
+        continue-on-error: true   # warnings non bloquantes en CI
+
+      # ── Phase 7 — Next.js production build ───────────────────────────────
+      - name: Build production bundle
+        run: npm run build
+
+      # ── Phase 8 — Upload build artefact ──────────────────────────────────
+      - name: Upload .next build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build-${{ github.sha }}
+          path: |
+            .next/
+            public/
+            package.json
+            package-lock.json
+            prisma/
+            next.config.mjs
+          retention-days: 7
+          if-no-files-found: error
+
+  # ── Optional deploy job (runs only on main/master) ────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nextjs-build-${{ github.sha }}
+
+      # ── Adapt this step to your hosting provider ──────────────────────────
+      # Vercel example:
+      # - name: Deploy to Vercel
+      #   uses: amondnet/vercel-action@v25
+      #   with:
+      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+      #     vercel-args: '--prod'
+
+      # Railway / Render / Fly.io: push the Docker image or trigger via webhook
+      # Docker example:
+      # - name: Build & push Docker image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     push: true
+      #     tags: ghcr.io/${{ github.repository }}:latest
+
+      - name: Deploy placeholder
+        run: echo "✅ Build artifact ready — wire your deploy step here."

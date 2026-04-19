@@ -108,7 +108,7 @@ jobs:
       # ── Signed release APK ────────────────────────────────────────────────
       - name: Build signed release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon --no-configuration-cache
         env:
           KEYSTORE_PATH:     keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
@@ -125,7 +125,7 @@ jobs:
       # ── Release AAB (Play Store) ──────────────────────────────────────────
       - name: Build release AAB
         working-directory: android
-        run: ./gradlew bundleRelease --no-daemon
+        run: ./gradlew bundleRelease --no-daemon --no-configuration-cache
         env:
           KEYSTORE_PATH:     keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}

@@ -107,7 +107,7 @@ jobs:
             -keypass   "$KEY_PASSWORD" \
             -dname "CN=Aiworkpay CI, OU=CI, O=Aiworkpay, L=Paris, S=IDF, C=FR" \
             -noprompt
-          printf 'storeFile=app/keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+          printf 'storeFile=keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
 
       # ── Signed release APK ────────────────────────────────────────────────

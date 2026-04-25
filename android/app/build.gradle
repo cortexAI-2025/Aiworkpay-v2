@@ -22,7 +22,7 @@ android {
         versionName "1.0.0"
 
         // Production URL loaded by the WebView
-        buildConfigField "String", "APP_URL", "\"https://aiworkpay.com\""
+        buildConfigField "String", "APP_URL", "\"https://aiworkpay.fr\""
     }
 
     signingConfigs {

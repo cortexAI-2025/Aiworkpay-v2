@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -117,15 +118,16 @@ class MainActivity : AppCompatActivity() {
             return true
         }
 
+        // Modern handler — only show offline page when the main frame fails
         override fun onReceivedError(
             view: WebView?,
-            errorCode: Int,
-            description: String?,
-            failingUrl: String?
+            request: WebResourceRequest?,
+            error: WebResourceError?
         ) {
-            binding.progressBar.visibility = View.GONE
-            // Load offline error page
-            view?.loadUrl("file:///android_asset/offline.html")
+            if (request?.isForMainFrame == true) {
+                binding.progressBar.visibility = View.GONE
+                view?.loadUrl("file:///android_asset/offline.html")
+            }
         }
     }
 }

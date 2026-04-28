@@ -35,11 +35,11 @@ export default async function TransactionsPage() {
 
   const totalEarned = transactions
     .filter((t) => t.status === 'SUCCEEDED' && t.type === 'PAYWORKER_PAYOUT')
-    .reduce((acc, t) => acc + Number(t.amount), 0);
+    .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
 
   const pendingPayout = transactions
     .filter((t) => t.status === 'PENDING' && t.type === 'PAYWORKER_PAYOUT')
-    .reduce((acc, t) => acc + Number(t.amount), 0);
+    .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
 
   return (
     <div className="space-y-6">

@@ -22,7 +22,7 @@ export async function PUT(
 
     if (mission.status !== 'PUBLISHED') {
       return NextResponse.json(
-        { error: 'Cette mission n\'est plus disponible (statut: ' + mission.status + ')' },
+        { error: 'Cette mission n\'est plus disponible' },
         { status: 409 }
       );
     }

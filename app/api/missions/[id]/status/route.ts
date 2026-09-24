@@ -9,9 +9,19 @@ const statusSchema = z.object({
 });
 
 const allowedPayworkerTransitions: Record<string, string[]> = {
-  ASSIGNED: ['IN_PROGRESS', 'CANCELED'],
+  ASSIGNED: ['IN_PROGRESS'],
   IN_PROGRESS: ['DELIVERED'],
   DELIVERED: [],
+  COMPLETED: [],
+  CANCELED: [],
+};
+
+const allowedAdminTransitions: Record<string, string[]> = {
+  PAYMENT_PENDING: ['CANCELED'],
+  PUBLISHED: ['CANCELED'],
+  ASSIGNED: ['CANCELED'],
+  IN_PROGRESS: ['CANCELED'],
+  DELIVERED: ['COMPLETED', 'CANCELED'],
   COMPLETED: [],
   CANCELED: [],
 };
@@ -49,14 +59,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    if (!isAdmin) {
-      const allowed = allowedPayworkerTransitions[mission.status] ?? [];
-      if (!allowed.includes(newStatus)) {
+    const allowed = (isAdmin ? allowedAdminTransitions : allowedPayworkerTransitions)[mission.status] ?? [];
+    if (!allowed.includes(newStatus)) {
         return NextResponse.json(
           { error: `Transition "${mission.status}" → "${newStatus}" non autorisée` },
           { status: 409 }
         );
-      }
     }
 
     // ── 90/10 split when mission is COMPLETED ────────────────────────────────
@@ -70,28 +78,41 @@ export async function PATCH(
         select: { stripeAccountId: true, stripeAccountOnboarded: true },
       });
 
-      // Update mission with computed amounts
-      const updatedMission = await prisma.mission.update({
-        where: { id },
-        data: {
-          status: 'COMPLETED',
-          platformFeeAmount,
-          payworkerAmount,
-        },
+      // Claim completion and create the ledger atomically before calling Stripe.
+      const completion = await prisma.$transaction(async (tx) => {
+        const completed = await tx.mission.updateMany({
+          where: { id, status: 'DELIVERED' },
+          data: { status: 'COMPLETED', platformFeeAmount, payworkerAmount },
+        });
+        if (completed.count !== 1) return null;
+        await tx.transaction.create({
+          data: {
+            missionId: id,
+            userId: mission.assignedToUserId!,
+            amount: platformFeeAmount,
+            currency: mission.currency,
+            type: 'PLATFORM_FEE',
+            status: 'SUCCEEDED',
+            stripePaymentIntentId: mission.stripePaymentIntentId ?? undefined,
+          },
+        });
+        const payout = await tx.transaction.create({
+          data: {
+            missionId: id,
+            userId: mission.assignedToUserId!,
+            amount: payworkerAmount,
+            currency: mission.currency,
+            type: 'PAYWORKER_PAYOUT',
+            status: 'PENDING',
+            stripePaymentIntentId: mission.stripePaymentIntentId ?? undefined,
+          },
+        });
+        const updatedMission = await tx.mission.findUniqueOrThrow({ where: { id } });
+        return { payoutId: payout.id, updatedMission };
       });
-
-      // Record platform fee transaction
-      await prisma.transaction.create({
-        data: {
-          missionId: id,
-          userId: mission.assignedToUserId,
-          amount: platformFeeAmount,
-          currency: mission.currency,
-          type: 'PLATFORM_FEE',
-          status: 'SUCCEEDED',
-          stripePaymentIntentId: mission.stripePaymentIntentId ?? undefined,
-        },
-      });
+      if (!completion) {
+        return NextResponse.json({ error: 'La mission a déjà été traitée' }, { status: 409 });
+      }
 
       // Payworker payout transaction
       let payoutStatus: 'PENDING' | 'SUCCEEDED' = 'PENDING';
@@ -100,13 +121,16 @@ export async function PATCH(
       if (payworker?.stripeAccountId && payworker.stripeAccountOnboarded) {
         // Transfer 90 % to payworker's connected Stripe account
         try {
-          const transfer = await stripe.transfers.create({
-            amount: Math.round(payworkerAmount * 100),
-            currency: mission.currency.toLowerCase(),
-            destination: payworker.stripeAccountId,
-            transfer_group: `mission_${id}`,
-            metadata: { missionId: id },
-          });
+          const transfer = await stripe.transfers.create(
+            {
+              amount: Math.round(payworkerAmount * 100),
+              currency: mission.currency.toLowerCase(),
+              destination: payworker.stripeAccountId,
+              transfer_group: `mission_${id}`,
+              metadata: { missionId: id },
+            },
+            { idempotencyKey: `mission_payout_${id}` }
+          );
           stripeTransferId = transfer.id;
           payoutStatus = 'SUCCEEDED';
         } catch (transferErr) {
@@ -115,21 +139,13 @@ export async function PATCH(
         }
       }
 
-      await prisma.transaction.create({
-        data: {
-          missionId: id,
-          userId: mission.assignedToUserId,
-          amount: payworkerAmount,
-          currency: mission.currency,
-          type: 'PAYWORKER_PAYOUT',
-          status: payoutStatus,
-          stripePaymentIntentId: mission.stripePaymentIntentId ?? undefined,
-          stripeTransferId,
-        },
+      await prisma.transaction.update({
+        where: { id: completion.payoutId },
+        data: { status: payoutStatus, stripeTransferId },
       });
 
       return NextResponse.json({
-        ...updatedMission,
+        ...completion.updatedMission,
         commission: {
           payworkerAmount,
           platformFeeAmount,
@@ -141,14 +157,25 @@ export async function PATCH(
     }
 
     // ── Cancelation: refund agent if mission not yet assigned ─────────────────
-    if (newStatus === 'CANCELED' && mission.status === 'PUBLISHED' && mission.stripePaymentIntentId) {
+    if (newStatus === 'CANCELED' && mission.stripePaymentIntentId) {
       try {
-        await stripe.refunds.create({
-          payment_intent: mission.stripePaymentIntentId,
-          reason: 'requested_by_customer',
-        });
+        const paymentIntent = await stripe.paymentIntents.retrieve(mission.stripePaymentIntentId);
+        if (paymentIntent.status === 'succeeded') {
+          await stripe.refunds.create({
+            payment_intent: mission.stripePaymentIntentId,
+            reason: 'requested_by_customer',
+          }, { idempotencyKey: `mission_refund_${id}` });
+        } else if (!['canceled', 'requires_payment_method'].includes(paymentIntent.status)) {
+          await stripe.paymentIntents.cancel(mission.stripePaymentIntentId, {}, {
+            idempotencyKey: `mission_cancel_${id}`,
+          });
+        }
       } catch (refundErr) {
         console.error('Refund failed:', refundErr);
+        return NextResponse.json(
+          { error: 'Le remboursement a échoué ; la mission n\'a pas été annulée' },
+          { status: 502 }
+        );
       }
     }
 

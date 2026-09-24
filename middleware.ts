@@ -10,7 +10,11 @@ export default auth((req) => {
 
   if (nextUrl.pathname.startsWith('/dashboard') && !isLoggedIn) {
     const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('from', nextUrl.pathname);
+    const returnPath = nextUrl.pathname;
+    // Only allow internal paths to prevent open redirect attacks
+    if (returnPath.startsWith('/') && !returnPath.includes('://')) {
+      loginUrl.searchParams.set('from', returnPath);
+    }
     return Response.redirect(loginUrl);
   }
 

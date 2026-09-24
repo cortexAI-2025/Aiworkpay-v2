@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const providers = [
   {
@@ -54,6 +54,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/auth/providers').then((res) => res.json())
+      .then((data) => setAvailableProviders(Object.keys(data).filter((id) => id !== 'credentials')))
+      .catch(() => setAvailableProviders([]));
+  }, []);
 
   const handleOAuth = (providerId: string) => {
     setOauthLoading(providerId);
@@ -86,7 +93,7 @@ export default function LoginPage() {
 
       {/* OAuth providers */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        {providers.map((p) => (
+        {providers.filter((p) => availableProviders.includes(p.id)).map((p) => (
           <button
             key={p.id}
             onClick={() => handleOAuth(p.id)}
@@ -152,7 +159,7 @@ export default function LoginPage() {
       </form>
 
       {/* Phone option */}
-      <div className="mt-4">
+      <div className="hidden">
         <Link
           href="/login/phone"
           className="flex items-center justify-center gap-2 w-full py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"

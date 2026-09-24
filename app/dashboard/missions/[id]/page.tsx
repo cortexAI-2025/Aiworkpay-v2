@@ -50,6 +50,12 @@ export default async function MissionDetailPage({
 
   if (!mission) notFound();
 
+  if (
+    session.user.role !== 'ADMIN' &&
+    mission.status !== 'PUBLISHED' &&
+    mission.assignedToUserId !== session.user.id
+  ) notFound();
+
   const isAssignedToMe = mission.assignedToUserId === session.user.id;
   const deadlineDate = new Date(mission.deadline);
   const isOverdue = deadlineDate < new Date() && !['COMPLETED', 'CANCELED'].includes(mission.status);
@@ -154,6 +160,7 @@ export default async function MissionDetailPage({
         userId={session.user.id}
         isAssignedToMe={isAssignedToMe}
         stripeConnected={user?.stripeAccountOnboarded ?? false}
+        isAdmin={session.user.role === 'ADMIN'}
       />
     </div>
   );

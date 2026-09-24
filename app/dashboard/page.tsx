@@ -9,12 +9,13 @@ export default async function DashboardPage() {
 
   const userId = session.user.id;
 
-  const [missions, myMissions, transactions, user] = await Promise.all([
+  const [missions, availableCount, myMissions, transactions, user] = await Promise.all([
     prisma.mission.findMany({
       where: { status: 'PUBLISHED' },
       orderBy: { createdAt: 'desc' },
       take: 6,
     }),
+    prisma.mission.count({ where: { status: 'PUBLISHED' } }),
     prisma.mission.findMany({
       where: { assignedToUserId: userId, status: { notIn: ['COMPLETED', 'CANCELED'] } },
       orderBy: { updatedAt: 'desc' },
@@ -34,7 +35,7 @@ export default async function DashboardPage() {
   const isConnected = user?.stripeAccountOnboarded ?? false;
 
   const stats = [
-    { label: 'Missions disponibles', value: missions.length, icon: '📋', color: 'bg-blue-50 text-blue-600' },
+    { label: 'Missions disponibles', value: availableCount, icon: '📋', color: 'bg-blue-50 text-blue-600' },
     { label: 'En cours', value: myMissions.length, icon: '🎯', color: 'bg-purple-50 text-purple-600' },
     { label: 'Total gagné', value: `${totalEarned.toLocaleString('fr-FR')} €`, icon: '💸', color: 'bg-green-50 text-green-600' },
     { label: 'Paiements', value: isConnected ? 'Actifs' : 'À configurer', icon: '⚡', color: isConnected ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600' },

@@ -13,7 +13,8 @@ const createMissionSchema = z.object({
   deadline: z
     .string()
     .datetime({ offset: true })
-    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+    .refine((val) => new Date(val) > new Date(), { message: 'La date limite doit être dans le futur' }),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
   // Optionally provide a Stripe payment_method_id for immediate charge
   paymentMethodId: z.string().optional(),
@@ -145,10 +146,15 @@ export async function GET(request: NextRequest) {
       where.status = status || 'PUBLISHED';
     }
 
+    const take = Math.min(Math.abs(parseInt(searchParams.get('limit') || '50')), 100);
+    const skip = Math.max(0, parseInt(searchParams.get('skip') || '0'));
+
     const missions = await prisma.mission.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: { attachments: true },
+      take,
+      skip,
     });
 
     return NextResponse.json(missions);

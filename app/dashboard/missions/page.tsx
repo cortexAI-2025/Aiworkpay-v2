@@ -20,6 +20,9 @@ export default async function MissionsPage({
   const params = await searchParams;
 
   const where: Record<string, unknown> = {};
+  const visibility = session.user.role === 'ADMIN'
+    ? undefined
+    : { OR: [{ status: 'PUBLISHED' }, { assignedToUserId: session.user.id }] };
 
   if (params.status) {
     where.status = params.status;
@@ -30,8 +33,10 @@ export default async function MissionsPage({
   if (params.priority) where.priority = params.priority;
   if (params.minBudget) where.budget = { gte: parseFloat(params.minBudget) };
 
+  const queryWhere = visibility ? { AND: [where, visibility] } : where;
+
   const missions = await prisma.mission.findMany({
-    where,
+    where: queryWhere,
     orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
   });
 

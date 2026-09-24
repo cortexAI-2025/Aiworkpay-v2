@@ -92,7 +92,7 @@ export default async function AccountPage() {
       {session.user.role === 'ADMIN' && <AdminSection />}
 
       {/* Danger zone */}
-      <div className="card border-red-200">
+      <div className="hidden">
         <h2 className="font-semibold text-red-700 mb-3">Zone de danger</h2>
         <p className="text-sm text-gray-600 mb-4">
           La suppression de votre compte est irréversible.

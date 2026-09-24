@@ -18,17 +18,25 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
+    if (!user.email) {
+      return NextResponse.json({ error: 'Un email est requis pour configurer Stripe' }, { status: 400 });
+    }
+
     let accountId = user.stripeAccountId;
 
     if (!accountId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        email: user.email ?? undefined,
-        capabilities: {
-          transfers: { requested: true },
+      // Idempotency key prevents duplicate accounts on concurrent requests
+      const account = await stripe.accounts.create(
+        {
+          type: 'express',
+          email: user.email,
+          capabilities: {
+            transfers: { requested: true },
+          },
+          metadata: { userId: user.id },
         },
-        metadata: { userId: user.id },
-      });
+        { idempotencyKey: `connect_${user.id}` }
+      );
       accountId = account.id;
       await prisma.user.update({
         where: { id: user.id },
@@ -39,7 +47,7 @@ export async function POST(request: NextRequest) {
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
       refresh_url: `${appUrl}/dashboard/account?connect=refresh`,
-      return_url: `${appUrl}/api/payments/connect-account/return?userId=${user.id}`,
+      return_url: `${appUrl}/api/payments/connect-account/return?accountId=${accountId}`,
       type: 'account_onboarding',
     });
 

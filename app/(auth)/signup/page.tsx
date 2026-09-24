@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const providers = [
   {
@@ -55,6 +55,13 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/auth/providers').then((res) => res.json())
+      .then((data) => setAvailableProviders(Object.keys(data).filter((id) => id !== 'credentials')))
+      .catch(() => setAvailableProviders([]));
+  }, []);
 
   const handleOAuth = (providerId: string) => {
     setOauthLoading(providerId);
@@ -113,7 +120,7 @@ export default function SignupPage() {
 
       {/* OAuth providers */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        {providers.map((p) => (
+        {providers.filter((p) => availableProviders.includes(p.id)).map((p) => (
           <button
             key={p.id}
             onClick={() => handleOAuth(p.id)}
@@ -133,7 +140,7 @@ export default function SignupPage() {
       {/* Phone */}
       <Link
         href="/login/phone"
-        className="flex items-center justify-center gap-2 w-full py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 mb-6"
+        className="hidden"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />

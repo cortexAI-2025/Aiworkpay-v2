@@ -13,26 +13,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
   providers: [
-    Google({
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? [Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
-    GitHub({
+    })] : []),
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET ? [GitHub({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
-    Apple({
+    })] : []),
+    ...(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET ? [Apple({
       clientId: process.env.APPLE_CLIENT_ID!,
       clientSecret: process.env.APPLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
-    Facebook({
+    })] : []),
+    ...(process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET ? [Facebook({
       clientId: process.env.FACEBOOK_CLIENT_ID!,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
+    })] : []),
     Credentials({
       name: 'credentials',
       credentials: {
@@ -42,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email: (credentials.email as string).trim().toLowerCase() },
         });
         if (!user?.password) return null;
         const isValid = await bcrypt.compare(credentials.password as string, user.password);
@@ -78,9 +74,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async createUser({ user }) {
       if (user.id) {
+        const email = user.email?.toLowerCase();
+        const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((v) => v.trim().toLowerCase());
         await prisma.user.update({
           where: { id: user.id },
-          data: { role: 'PAYWORKER' },
+          data: { role: email && adminEmails.includes(email) ? 'ADMIN' : 'PAYWORKER' },
         });
       }
     },

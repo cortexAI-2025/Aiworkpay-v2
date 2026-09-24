@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
     }
 
-    const { email, password } = parsed.data;
+    const email = parsed.data.email.trim().toLowerCase();
+    const { password } = parsed.data;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -25,8 +26,9 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((v) => v.trim().toLowerCase());
     await prisma.user.create({
-      data: { email, password: hashedPassword, role: 'PAYWORKER' },
+      data: { email, password: hashedPassword, role: adminEmails.includes(email) ? 'ADMIN' : 'PAYWORKER' },
     });
 
     // Session is created by the caller via signIn('credentials') after this

@@ -87,6 +87,18 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 // ─── App models ───────────────────────────────────────────────────────────────
 
 model User {
@@ -95,7 +107,7 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  password      String?   // null for OAuth users
+  password      String? // null for OAuth users
   phone         String?   @unique
   phoneVerified Boolean   @default(false)
   role          Role      @default(PAYWORKER)
@@ -110,18 +122,19 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts         Account[]
-  sessions         Session[]
-  apiKeys          ApiKey[]
-  missionsCreated  Mission[]     @relation("MissionCreatedByUser")
-  missionsAssigned Mission[]     @relation("MissionAssignedTo")
-  transactions     Transaction[]
+  accounts            Account[]
+  sessions            Session[]
+  apiKeys             ApiKey[]
+  missionsCreated     Mission[]            @relation("MissionCreatedByUser")
+  missionsAssigned    Mission[]            @relation("MissionAssignedTo")
+  transactions        Transaction[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model ApiKey {
-  id    String  @id @default(uuid())
-  key   String  @unique
-  label String
+  id     String  @id @default(uuid())
+  key    String  @unique
+  label  String
   active Boolean @default(true)
 
   // Stripe: each agent (API key) has a Stripe customer for billing
@@ -130,7 +143,7 @@ model ApiKey {
   createdAt DateTime @default(now())
 
   createdByUserId String?
-  createdBy       User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdBy       User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   missions Mission[]
 }
@@ -156,13 +169,13 @@ model Mission {
   updatedAt DateTime @updatedAt
 
   createdByApiKeyId String?
-  createdByApiKey   ApiKey?  @relation(fields: [createdByApiKeyId], references: [id], onDelete: SetNull)
+  createdByApiKey   ApiKey? @relation(fields: [createdByApiKeyId], references: [id], onDelete: SetNull)
 
   createdByUserId String?
-  createdByUser   User?    @relation("MissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUser   User?   @relation("MissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   assignedToUserId String?
-  assignedTo       User?    @relation("MissionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedTo       User?   @relation("MissionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
 
   attachments  MissionAttachment[]
   transactions Transaction[]
@@ -177,7 +190,7 @@ model MissionAttachment {
   createdAt DateTime @default(now())
 
   missionId String
-  mission   Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
 }
 
 model Transaction {

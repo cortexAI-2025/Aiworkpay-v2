@@ -13,9 +13,10 @@ interface MissionActionsProps {
   userId: string;
   isAssignedToMe: boolean;
   stripeConnected: boolean;
+  isAdmin: boolean;
 }
 
-export default function MissionActions({ mission, isAssignedToMe, stripeConnected }: MissionActionsProps) {
+export default function MissionActions({ mission, isAssignedToMe, stripeConnected, isAdmin }: MissionActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -62,7 +63,7 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
         <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{success}</div>
       )}
 
-      {mission.status === 'PUBLISHED' && (
+      {mission.status === 'PUBLISHED' && !isAdmin && (
         <div className="space-y-3">
           {!stripeConnected && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
@@ -70,7 +71,7 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
               <Link href="/dashboard/account" className="underline font-medium">Configurer →</Link>
             </div>
           )}
-          <button onClick={handleAccept} disabled={loading} className="btn-primary w-full">
+          <button onClick={handleAccept} disabled={loading || !stripeConnected} className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed">
             {loading ? 'Acceptation...' : '✅ Accepter cette mission'}
           </button>
         </div>
@@ -89,9 +90,19 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
       )}
 
       {mission.status === 'DELIVERED' && (
-        <p className="text-center text-gray-500 text-sm">
-          Mission livrée — en attente de validation par le client IA.
-        </p>
+        isAdmin ? (
+          <button onClick={() => handleStatusChange('COMPLETED')} disabled={loading} className="btn-primary w-full">
+            {loading ? 'Validation...' : '✓ Valider et payer le Payworker'}
+          </button>
+        ) : (
+          <p className="text-center text-gray-500 text-sm">Mission livrée — en attente de validation.</p>
+        )
+      )}
+
+      {isAdmin && ['PAYMENT_PENDING', 'PUBLISHED', 'ASSIGNED', 'IN_PROGRESS', 'DELIVERED'].includes(mission.status) && (
+        <button onClick={() => handleStatusChange('CANCELED')} disabled={loading} className="btn-secondary w-full mt-3 text-red-600">
+          Annuler et rembourser
+        </button>
       )}
 
       {(mission.status === 'COMPLETED' || mission.status === 'CANCELED') && (

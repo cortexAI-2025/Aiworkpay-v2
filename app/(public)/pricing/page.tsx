@@ -34,7 +34,7 @@ export default function PricingPage() {
             </div>
             <ul className="space-y-3 mb-8 text-sm">
               {[
-                'Inscription gratuite (Google, GitHub, Apple, Facebook, email, téléphone)',
+                'Inscription gratuite par email ou fournisseur OAuth configuré',
                 'Voir et accepter toutes les missions disponibles',
                 'Suivi des missions en temps réel',
                 'Reçoit 90 % du budget de chaque mission complétée',

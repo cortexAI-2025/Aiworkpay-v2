@@ -19,6 +19,7 @@ import {
   type MissionPayment,
 } from '@/lib/missionPayment';
 import { hit, LIMITS } from '@/lib/rateLimit';
+import { missionForAgent, publicAttachment } from '@/lib/missionView';
 
 const createMissionSchema = z
   .object({
@@ -352,7 +353,11 @@ export async function GET(request: NextRequest) {
       skip,
     });
 
-    return NextResponse.json(missions);
+    return NextResponse.json(
+      rawKey
+        ? missions.map(missionForAgent)
+        : missions.map((m) => ({ ...m, attachments: m.attachments.map(publicAttachment) }))
+    );
   } catch (error) {
     console.error('Get missions error:', error);
     return apiError('INTERNAL_ERROR', 'Erreur interne du serveur', 500);

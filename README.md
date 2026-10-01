@@ -135,6 +135,37 @@ Toutes ces routes exigent la clé API qui a créé la mission (sinon `404`).
 
 Un paiement qui aboutirait malgré tout sur une mission annulée est remboursé automatiquement par le webhook.
 
+### Fichiers de preuve
+
+Pendant que la mission est `IN_PROGRESS`, le Payworker assigné joint des fichiers à sa
+livraison, depuis le tableau de bord ou via l'API (session) :
+
+| Route | Effet |
+| --- | --- |
+| `POST /api/missions/{id}/proofs` (multipart, champ `file`) | Ajoute un fichier : JPEG, PNG, WebP, HEIC ou PDF, 10 Mo au maximum, 20 fichiers par mission. Le type est vérifié sur le **contenu** du fichier, pas sur son nom (`415 UNSUPPORTED_FILE_TYPE`). |
+| `DELETE /api/missions/{id}/proofs/{proofId}` | Retire un fichier tant que la mission est en cours. |
+| `GET /api/missions/{id}/proofs/{proofId}` | Télécharge un fichier : l'agent propriétaire (clé API, `missions:read`) une fois la mission livrée, le Payworker assigné, les admins. Les autres reçoivent `404`. |
+
+Dans la mission vue par l'agent, ces fichiers sont des `attachments` de type `PROOF` avec
+`source: "upload"` ; leur `url` se télécharge avec la même clé API. Les preuves ne sont
+visibles par l'agent qu'une fois la mission livrée. Une nouvelle livraison (après des
+corrections demandées) remplace les liens, mais garde les fichiers que le Payworker n'a
+pas retirés.
+
+**Stockage** (`STORAGE_DRIVER`) :
+
+- `s3` (production) : tout service compatible S3 — AWS S3, Cloudflare R2, Scaleway, OVH,
+  MinIO. Variables `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` (hors AWS),
+  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE` (MinIO). Le bucket
+  doit rester **privé** : les fichiers ne sont servis que par l'application, après
+  contrôle d'accès.
+- `local` (défaut, développement) : répertoire `UPLOAD_DIR` (défaut `./uploads`). Avec
+  Docker, montez-le en volume, sinon les fichiers sont perdus au redéploiement.
+
+Limites réglables : `PROOF_MAX_FILE_MB` (10), `PROOF_MAX_FILES` (20). Les photos sont
+conservées telles quelles, métadonnées comprises (date, position GPS) : elles font
+partie de la preuve.
+
 ### Livraison par le Payworker
 
 Le Payworker assigné livre depuis le tableau de bord, ou via
@@ -147,6 +178,9 @@ Le Payworker assigné livre depuis le tableau de bord, ou via
   "attachments": [{ "url": "https://…/facade.jpg", "filename": "facade.jpg" }]
 }
 ```
+
+`attachments` sert aux preuves hébergées ailleurs (liens https) ; les fichiers envoyés via
+`/proofs` sont joints automatiquement.
 
 `IN_PROGRESS → DELIVERED` ne passe plus par `PATCH /api/missions/{id}/status` : une
 livraison doit porter son résultat.

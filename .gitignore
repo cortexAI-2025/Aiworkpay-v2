@@ -36,3 +36,6 @@ next-env.d.ts
 
 # prisma
 prisma/migrations/**/migration_lock.toml
+
+# Proof files uploaded with STORAGE_DRIVER=local
+uploads/

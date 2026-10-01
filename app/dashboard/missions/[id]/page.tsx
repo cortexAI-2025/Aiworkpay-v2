@@ -62,6 +62,12 @@ export default async function MissionDetailPage({
 
   const briefAttachments = mission.attachments.filter((att) => att.kind === 'BRIEF');
   const proofAttachments = mission.attachments.filter((att) => att.kind === 'PROOF');
+  // Uploaded files are served by the app after an access check, at a relative URL here
+  const proofHref = (att: (typeof proofAttachments)[number]) =>
+    att.storageKey ? `/api/missions/${mission.id}/proofs/${att.id}` : att.url;
+  const uploadedProofs = proofAttachments
+    .filter((att) => att.storageKey)
+    .map((att) => ({ id: att.id, filename: att.filename, mimeType: att.mimeType, size: att.size }));
   const canSeeResult = isAssignedToMe || session.user.role === 'ADMIN';
 
   // Show 90/10 breakdown to assignee
@@ -182,13 +188,26 @@ export default async function MissionDetailPage({
               {JSON.stringify(mission.resultData, null, 2)}
             </pre>
           )}
+          {proofAttachments.some((att) => att.storageKey && att.mimeType?.startsWith('image/') && att.mimeType !== 'image/heic') && (
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
+              {proofAttachments
+                .filter((att) => att.storageKey && att.mimeType?.startsWith('image/') && att.mimeType !== 'image/heic')
+                .map((att) => (
+                  <a key={att.id} href={proofHref(att)} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- private file behind an access check */}
+                    <img src={proofHref(att)} alt={att.filename} className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                  </a>
+                ))}
+            </div>
+          )}
           {proofAttachments.length > 0 && (
             <ul className="mt-3 space-y-1">
               {proofAttachments.map((att) => (
                 <li key={att.id}>
-                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-sm text-brand underline break-all">
+                  <a href={proofHref(att)} target="_blank" rel="noopener noreferrer" className="text-sm text-brand underline break-all">
                     📎 {att.filename}
                   </a>
+                  {att.size && <span className="text-xs text-gray-400 ml-2">{(att.size / 1024).toFixed(0)} Ko</span>}
                 </li>
               ))}
             </ul>
@@ -199,6 +218,7 @@ export default async function MissionDetailPage({
       {/* Actions */}
       <MissionActions
         mission={{ id: mission.id, status: mission.status, assignedToUserId: mission.assignedToUserId }}
+        uploadedProofs={isAssignedToMe ? uploadedProofs : []}
         userId={session.user.id}
         isAssignedToMe={isAssignedToMe}
         stripeConnected={user?.stripeAccountOnboarded ?? false}

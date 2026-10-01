@@ -4,3 +4,4 @@ node_modules
 .env*
 android
 npm-debug.log*
+uploads

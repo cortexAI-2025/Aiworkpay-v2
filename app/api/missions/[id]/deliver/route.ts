@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { apiError } from '@/lib/agentApi';
+import { publicAttachment } from '@/lib/missionView';
 
 const MAX_RESULT_DATA_BYTES = 64 * 1024;
 
@@ -87,8 +88,9 @@ export async function POST(
       });
       if (claimed.count !== 1) return null;
 
-      // A new delivery after requested changes replaces the previous proofs
-      await tx.missionAttachment.deleteMany({ where: { missionId: id, kind: 'PROOF' } });
+      // A new delivery after requested changes replaces the previous proof
+      // links; uploaded files stay until the Payworker removes them
+      await tx.missionAttachment.deleteMany({ where: { missionId: id, kind: 'PROOF', storageKey: null } });
       if (attachments.length > 0) {
         await tx.missionAttachment.createMany({
           data: attachments.map((attachment) => ({ ...attachment, missionId: id, kind: 'PROOF' as const })),
@@ -109,7 +111,7 @@ export async function POST(
       );
     }
 
-    return NextResponse.json(delivered);
+    return NextResponse.json({ ...delivered, attachments: delivered.attachments.map(publicAttachment) });
   } catch (error) {
     console.error('Deliver mission error:', error);
     return apiError('INTERNAL_ERROR', 'Erreur interne du serveur', 500);

@@ -219,13 +219,17 @@ model Mission {
 }
 
 model MissionAttachment {
-  id        String         @id @default(uuid())
-  url       String
-  filename  String
-  mimeType  String?
-  size      Int?
-  kind      AttachmentKind @default(BRIEF)
-  createdAt DateTime       @default(now())
+  id           String         @id @default(uuid())
+  url          String
+  filename     String
+  mimeType     String?
+  size         Int?
+  kind         AttachmentKind @default(BRIEF)
+  // Set for a file uploaded to private storage (served by the app after an
+  // access check); null for an external link
+  storageKey   String?        @unique
+  uploadedById String?
+  createdAt    DateTime       @default(now())
 
   missionId String
   mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)

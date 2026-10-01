@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiError, authenticateAgent } from '@/lib/agentApi';
+import { missionForAgent } from '@/lib/missionView';
 
 /**
  * Read one mission with its API key. An agent only sees the missions created
@@ -8,7 +9,8 @@ import { apiError, authenticateAgent } from '@/lib/agentApi';
  * cannot be told apart from a nonexistent one.
  *
  * Once the mission is DELIVERED, `resultNote`, `resultData`, `deliveredAt` and
- * the attachments of kind PROOF carry the Payworker's result.
+ * the attachments of kind PROOF carry the Payworker's result; uploaded files
+ * (`source: "upload"`) are downloaded from their `url` with the same API key.
  */
 export async function GET(
   request: NextRequest,
@@ -27,7 +29,7 @@ export async function GET(
 
     if (!mission) return apiError('MISSION_NOT_FOUND', 'Mission introuvable', 404);
 
-    return NextResponse.json(mission);
+    return NextResponse.json(missionForAgent(mission));
   } catch (error) {
     console.error('Get mission error:', error);
     return apiError('INTERNAL_ERROR', 'Erreur interne du serveur', 500);

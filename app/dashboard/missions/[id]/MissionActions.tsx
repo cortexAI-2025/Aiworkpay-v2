@@ -1,4 +1,6 @@
 'use client';
+import { useI18n } from '@/components/LanguageProvider';
+
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -11,7 +13,7 @@ interface UploadedProof {
   size: number | null;
 }
 
-const ACCEPTED_FILES = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
+
 
 interface MissionActionsProps {
   mission: {
@@ -28,6 +30,10 @@ interface MissionActionsProps {
 }
 
 export default function MissionActions({ mission, uploadedProofs, isAssignedToMe, stripeConnected, isAdmin }: MissionActionsProps) {
+  const { t } = useI18n();
+
+const ACCEPTED_FILES = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
+
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,10 +45,10 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
     try {
       const res = await fetch(`/api/missions/${mission.id}/accept`, { method: 'PUT' });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Erreur lors de l'acceptation"); return; }
-      setSuccess('Mission acceptée !');
+      if (!res.ok) { setError(data.error || t("Erreur lors de l'acceptation")); return; }
+      setSuccess(t("Mission acceptée !"));
       router.refresh();
-    } catch { setError('Erreur réseau'); }
+    } catch { setError(t("Erreur réseau")); }
     finally { setLoading(false); }
   };
 
@@ -64,12 +70,12 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
         const res = await fetch(`/api/missions/${mission.id}/proofs`, { method: 'POST', body });
         const data = await res.json();
         if (!res.ok) {
-          setError(`${file.name} : ${data.error || 'envoi impossible'}`);
+          setError(`${file.name} : ${data.error || t("envoi impossible")}`);
           continue;
         }
         setFiles((current) => [...current, { id: data.id, filename: data.filename, mimeType: data.mimeType, size: data.size }]);
       } catch {
-        setError(`${file.name} : erreur réseau`);
+        setError(`${file.name} : ${t("Erreur réseau")}`);
       }
     }
     setUploading(false);
@@ -79,7 +85,7 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
     setError('');
     const res = await fetch(`/api/missions/${mission.id}/proofs/${id}`, { method: 'DELETE' });
     if (res.ok) setFiles((current) => current.filter((f) => f.id !== id));
-    else setError((await res.json()).error || 'Suppression impossible');
+    else setError((await res.json()).error || t("Suppression impossible"));
   };
   const [proofLinks, setProofLinks] = useState('');
 
@@ -100,10 +106,10 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
         body: JSON.stringify({ note: resultNote, attachments }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Erreur lors de la livraison'); return; }
-      setSuccess('Mission livrée !');
+      if (!res.ok) { setError(data.error || t("Erreur lors de la livraison")); return; }
+      setSuccess(t("Mission livrée !"));
       router.refresh();
-    } catch { setError('Erreur réseau'); }
+    } catch { setError(t("Erreur réseau")); }
     finally { setLoading(false); }
   };
 
@@ -117,10 +123,10 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
         body: JSON.stringify({ status: newStatus }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Erreur de mise à jour'); return; }
-      setSuccess('Statut mis à jour.');
+      if (!res.ok) { setError(data.error || t("Erreur de mise à jour")); return; }
+      setSuccess(t("Statut mis à jour."));
       router.refresh();
-    } catch { setError('Erreur réseau'); }
+    } catch { setError(t("Erreur réseau")); }
     finally { setLoading(false); }
   };
 
@@ -129,7 +135,7 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
       <h2 className="font-semibold text-gray-900 mb-4">Actions</h2>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{t(error)}</div>
       )}
       {success && (
         <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{success}</div>
@@ -139,26 +145,26 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
         <div className="space-y-3">
           {!stripeConnected && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
-              ⚠️ Configurez votre compte Stripe pour recevoir vos paiements.{' '}
-              <Link href="/dashboard/account" className="underline font-medium">Configurer →</Link>
+              {t("⚠️ Configurez votre compte Stripe pour recevoir vos paiements.")}{' '}
+              <Link href="/dashboard/account" className="underline font-medium">{t("Configurer →")}</Link>
             </div>
           )}
           <button onClick={handleAccept} disabled={loading || !stripeConnected} className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed">
-            {loading ? 'Acceptation...' : '✅ Accepter cette mission'}
+            {loading ? 'Acceptation...' : t("✅ Accepter cette mission")}
           </button>
         </div>
       )}
 
       {isAssignedToMe && mission.status === 'ASSIGNED' && (
         <button onClick={() => handleStatusChange('IN_PROGRESS')} disabled={loading} className="btn-primary w-full">
-          {loading ? 'Chargement...' : '▶️ Démarrer la mission'}
+          {loading ? t("Chargement...") : t("▶️ Démarrer la mission")}
         </button>
       )}
 
       {isAssignedToMe && mission.status === 'IN_PROGRESS' && (
         <form onSubmit={handleDeliver} className="space-y-3">
           <label className="block">
-            <span className="text-sm font-medium text-gray-700">Résultat</span>
+            <span className="text-sm font-medium text-gray-700">{t("Résultat")}</span>
             <textarea
               value={resultNote}
               onChange={(e) => setResultNote(e.target.value)}
@@ -166,11 +172,11 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
               maxLength={20000}
               rows={6}
               className="input mt-1"
-              placeholder="Ce qui a été fait, constaté, avec la date et l'heure."
+              placeholder={t("Ce qui a été fait, constaté, avec la date et l'heure.")}
             />
           </label>
           <div>
-            <span className="text-sm font-medium text-gray-700">Fichiers (photos, PDF — 10 Mo max. chacun)</span>
+            <span className="text-sm font-medium text-gray-700">{t("Fichiers (photos, PDF — 10 Mo max. chacun)")}</span>
             <input
               type="file"
               multiple
@@ -179,7 +185,7 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
               disabled={uploading}
               className="block w-full text-sm mt-1"
             />
-            {uploading && <p className="text-xs text-gray-500 mt-1">Envoi en cours…</p>}
+            {uploading && <p className="text-xs text-gray-500 mt-1">{t("Envoi en cours…")}</p>}
             {files.length > 0 && (
               <ul className="mt-2 space-y-1">
                 {files.map((f) => (
@@ -188,15 +194,14 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
                       📎 {f.filename}
                     </a>
                     <button type="button" onClick={() => handleRemoveFile(f.id)} className="text-xs text-red-600 ml-2">
-                      Retirer
-                    </button>
+                      {t("Retirer")}</button>
                   </li>
                 ))}
               </ul>
             )}
           </div>
           <label className="block">
-            <span className="text-sm font-medium text-gray-700">Autres preuves (liens https, un par ligne)</span>
+            <span className="text-sm font-medium text-gray-700">{t("Autres preuves (liens https, un par ligne)")}</span>
             <textarea
               value={proofLinks}
               onChange={(e) => setProofLinks(e.target.value)}
@@ -206,7 +211,7 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
             />
           </label>
           <button type="submit" disabled={loading || uploading || !resultNote.trim()} className="btn-primary w-full disabled:opacity-50">
-            {loading ? 'Envoi...' : '📦 Livrer la mission'}
+            {loading ? t("Envoi...") : t("📦 Livrer la mission")}
           </button>
         </form>
       )}
@@ -214,27 +219,25 @@ export default function MissionActions({ mission, uploadedProofs, isAssignedToMe
       {mission.status === 'DELIVERED' && (
         isAdmin ? (
           <button onClick={() => handleStatusChange('COMPLETED')} disabled={loading} className="btn-primary w-full">
-            {loading ? 'Validation...' : '✓ Valider et payer le Payworker'}
+            {loading ? 'Validation...' : t("✓ Valider et payer le Payworker")}
           </button>
         ) : (
-          <p className="text-center text-gray-500 text-sm">Mission livrée — en attente de validation.</p>
+          <p className="text-center text-gray-500 text-sm">{t("Mission livrée — en attente de validation.")}</p>
         )
       )}
 
       {isAdmin && ['PAYMENT_PENDING', 'PUBLISHED', 'ASSIGNED', 'IN_PROGRESS', 'DELIVERED'].includes(mission.status) && (
         <button onClick={() => handleStatusChange('CANCELED')} disabled={loading} className="btn-secondary w-full mt-3 text-red-600">
-          Annuler et rembourser
-        </button>
+          {t("Annuler et rembourser")}</button>
       )}
 
       {(mission.status === 'COMPLETED' || mission.status === 'CANCELED') && (
-        <p className="text-center text-gray-500 text-sm">Cette mission est terminée.</p>
+        <p className="text-center text-gray-500 text-sm">{t("Cette mission est terminée.")}</p>
       )}
 
       {mission.status === 'PAYMENT_PENDING' && (
         <p className="text-center text-gray-500 text-sm">
-          Paiement de l&apos;agent en attente — la mission sera publiée dès confirmation Stripe.
-        </p>
+          {t("Paiement de l'agent en attente — la mission sera publiée dès confirmation Stripe.")}</p>
       )}
     </div>
   );

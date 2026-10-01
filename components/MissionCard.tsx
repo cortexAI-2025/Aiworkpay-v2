@@ -1,3 +1,4 @@
+import { getI18n } from '@/lib/i18n/server';
 import Link from 'next/link';
 
 interface MissionCardProps {
@@ -14,18 +15,27 @@ interface MissionCardProps {
   showLink?: boolean;
 }
 
+
+
+
+
+
+
+
+
+export default async function MissionCard({ mission, showLink = true }: MissionCardProps) {
+  const { t, formatLocale } = await getI18n();
+
 const priorityBadge = {
   LOW: 'badge-low',
   MEDIUM: 'badge-medium',
   HIGH: 'badge-high',
 };
-
 const priorityLabel = {
-  LOW: 'Faible',
-  MEDIUM: 'Moyen',
-  HIGH: 'Haute',
+  LOW: t("Faible"),
+  MEDIUM: t("Moyen"),
+  HIGH: t("Haute"),
 };
-
 const statusColors: Record<string, string> = {
   CREATED: 'bg-gray-100 text-gray-700',
   PUBLISHED: 'bg-blue-100 text-blue-700',
@@ -35,18 +45,16 @@ const statusColors: Record<string, string> = {
   COMPLETED: 'bg-green-100 text-green-700',
   CANCELED: 'bg-red-100 text-red-700',
 };
-
 const statusLabels: Record<string, string> = {
-  CREATED: 'Créée',
-  PUBLISHED: 'Publiée',
-  ASSIGNED: 'Assignée',
-  IN_PROGRESS: 'En cours',
-  DELIVERED: 'Livrée',
-  COMPLETED: 'Terminée',
-  CANCELED: 'Annulée',
+  CREATED: t("Créée"),
+  PUBLISHED: t("Publiée"),
+  ASSIGNED: t("Assignée"),
+  IN_PROGRESS: t("En cours"),
+  DELIVERED: t("Livrée"),
+  COMPLETED: t("Terminée"),
+  CANCELED: t("Annulée"),
 };
 
-export default function MissionCard({ mission, showLink = true }: MissionCardProps) {
   const deadlineDate = new Date(mission.deadline);
   const isOverdue = deadlineDate < new Date() && mission.status !== 'COMPLETED' && mission.status !== 'CANCELED';
 
@@ -74,14 +82,14 @@ export default function MissionCard({ mission, showLink = true }: MissionCardPro
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            {Number(mission.budget).toLocaleString('fr-FR')} {mission.currency}
+            {Number(mission.budget).toLocaleString(formatLocale)} {mission.currency}
           </div>
           <div className={`flex items-center ${isOverdue ? 'text-red-600' : 'text-gray-500'}`}>
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            {deadlineDate.toLocaleDateString('fr-FR')}
-            {isOverdue && ' (dépassée)'}
+            {deadlineDate.toLocaleDateString(formatLocale)}
+            {isOverdue && t(" (dépassée)")}
           </div>
         </div>
         {showLink && (
@@ -89,8 +97,7 @@ export default function MissionCard({ mission, showLink = true }: MissionCardPro
             href={`/dashboard/missions/${mission.id}`}
             className="text-brand hover:text-brand-dark font-medium transition-colors"
           >
-            Voir →
-          </Link>
+            {t("Voir →")}</Link>
         )}
       </div>
     </div>

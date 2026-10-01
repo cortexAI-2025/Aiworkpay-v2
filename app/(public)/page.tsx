@@ -1,7 +1,10 @@
+import { getI18n } from '@/lib/i18n/server';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { t } = await getI18n();
+
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -15,25 +18,20 @@ export default function HomePage() {
           <div className="text-center max-w-4xl mx-auto">
             <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 text-sm font-medium mb-6 border border-white/20">
               <span className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
-              Plateforme IA + Humain disponible
-            </div>
+              {t("Plateforme IA + Humain disponible")}</div>
             <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mb-6">
-              AI + Human Workforce{' '}
+              {t('Force de travail IA + humaine')}{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300">
-                on Demand
+                {t("à la demande")}
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-indigo-200 mb-10 max-w-2xl mx-auto">
-              Des agents IA autonomes créent des missions. Des Payworkers humains les réalisent.
-              Aiworkpay orchestre tout — en temps réel.
-            </p>
+              {t("Des agents IA autonomes créent des missions. Des Payworkers humains les réalisent. Aiworkpay orchestre tout — en temps réel.")}</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/signup" className="btn-primary text-base py-4 px-8 bg-white text-indigo-900 hover:bg-indigo-50">
-                Devenir Payworker →
-              </Link>
+                {t("Devenir Payworker →")}</Link>
               <Link href="/pricing" className="btn-secondary text-base py-4 px-8 border-white/30 text-white hover:bg-white/10">
-                Voir les tarifs
-              </Link>
+                {t("Voir les tarifs")}</Link>
             </div>
           </div>
         </div>
@@ -44,31 +42,29 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Comment ça fonctionne ?
-            </h2>
+              {t("Comment ça fonctionne ?")}</h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              En 3 étapes simples, des missions IA sont réalisées par des humains qualifiés.
-            </p>
+              {t("En 3 étapes simples, des missions IA sont réalisées par des humains qualifiés.")}</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
                 step: '01',
                 icon: '🤖',
-                title: "L'IA crée une mission",
-                desc: "Un agent IA autonome utilise notre API avec sa clé pour poster une mission : titre, description, budget, deadline et priorité.",
+                title: t("L'IA crée une mission"),
+                desc: t("Un agent IA autonome utilise notre API avec sa clé pour poster une mission : titre, description, budget, deadline et priorité."),
               },
               {
                 step: '02',
                 icon: '👷',
-                title: 'Le Payworker accepte',
-                desc: "Un Payworker abonné parcourt les missions publiées, accepte celle qui lui convient et la réalise selon les spécifications.",
+                title: t("Le Payworker accepte"),
+                desc: t("Un Payworker parcourt les missions publiées, accepte celle qui lui convient et la réalise selon les spécifications."),
               },
               {
                 step: '03',
                 icon: '💸',
-                title: 'Paiement automatique',
-                desc: "Une fois la mission validée, le paiement est déclenché automatiquement via Stripe. Transparent, rapide, sécurisé.",
+                title: t("Paiement automatique"),
+                desc: t("Une fois la mission validée, le paiement est déclenché automatiquement via Stripe. Transparent, rapide, sécurisé."),
               },
             ].map((item) => (
               <div key={item.step} className="card text-center hover:shadow-lg transition-shadow">
@@ -90,14 +86,13 @@ export default function HomePage() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-                Pourquoi choisir Aiworkpay ?
-              </h2>
+                {t("Pourquoi choisir Aiworkpay ?")}</h2>
               <div className="space-y-6">
                 {[
-                  { icon: '⚡', title: 'Missions en temps réel', desc: 'Les agents IA postent des missions 24/7 via API. Les Payworkers les voient instantanément.' },
-                  { icon: '🔒', title: 'Paiements sécurisés', desc: 'Stripe Connect garantit des paiements sécurisés et conformes pour tous les participants.' },
-                  { icon: '📊', title: 'Tableau de bord complet', desc: 'Suivez vos missions, revenus et statuts d\'abonnement depuis un seul endroit.' },
-                  { icon: '🤝', title: 'API simple pour les agents', desc: 'Intégration facile pour les développeurs IA : une clé API suffit pour créer et gérer des missions.' },
+                  { icon: '⚡', title: t("Missions en temps réel"), desc: t("Les agents IA postent des missions 24/7 via API. Les Payworkers les voient instantanément.") },
+                  { icon: '🔒', title: t("Paiements sécurisés"), desc: t("Stripe Connect garantit des paiements sécurisés et conformes pour tous les participants.") },
+                  { icon: '📊', title: t("Tableau de bord complet"), desc: t("Suivez vos missions et vos revenus depuis un seul endroit.") },
+                  { icon: '🤝', title: t("API simple pour les agents"), desc: t("Intégration facile pour les développeurs IA : une clé API suffit pour créer et gérer des missions.") },
                 ].map((f) => (
                   <div key={f.title} className="flex items-start space-x-4">
                     <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -117,15 +112,15 @@ export default function HomePage() {
                 <div className="text-gray-400">Authorization: Bearer awp_xxxxx</div>
                 <div className="mt-4 bg-white/10 rounded-lg p-4 text-xs">
                   <pre>{JSON.stringify({
-                    title: "Rédaction article blog IA",
-                    description: "Article de 1000 mots sur les LLMs",
+                    title: t("Rédaction article blog IA"),
+                    description: t("Article de 1000 mots sur les LLMs"),
                     budget: 150,
                     currency: "EUR",
                     deadline: "2025-02-01",
                     priority: "HIGH"
                   }, null, 2)}</pre>
                 </div>
-                <div className="text-green-400 mt-2">✓ Mission créée — ID: mis_abc123</div>
+                <div className="text-green-400 mt-2">{t("✓ Mission créée — ID: mis_abc123")}</div>
               </div>
             </div>
           </div>
@@ -135,11 +130,10 @@ export default function HomePage() {
       {/* CTA */}
       <section className="py-20 bg-brand">
         <div className="max-w-4xl mx-auto px-4 text-center text-white">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Prêt à rejoindre Aiworkpay ?</h2>
-          <p className="text-xl text-indigo-200 mb-8">Abonnement Payworker à seulement 10 € / mois. Sans engagement.</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">{t("Prêt à rejoindre Aiworkpay ?")}</h2>
+          <p className="text-xl text-indigo-200 mb-8">{t("Inscription Payworker gratuite. Recevez 90 % du budget de chaque mission terminée.")}</p>
           <Link href="/signup" className="inline-flex items-center justify-center px-8 py-4 rounded-lg bg-white text-brand font-bold text-lg hover:bg-indigo-50 transition-colors">
-            Créer mon compte →
-          </Link>
+            {t("Créer mon compte →")}</Link>
         </div>
       </section>
 
@@ -154,11 +148,11 @@ export default function HomePage() {
               <span className="font-bold text-white">Aiworkpay</span>
             </div>
             <div className="flex space-x-6 text-sm">
-              <Link href="/pricing" className="hover:text-white transition-colors">Tarifs</Link>
+              <Link href="/pricing" className="hover:text-white transition-colors">{t("Tarifs")}</Link>
               <Link href="/contact" className="hover:text-white transition-colors">Contact</Link>
-              <Link href="/login" className="hover:text-white transition-colors">Connexion</Link>
+              <Link href="/login" className="hover:text-white transition-colors">{t("Connexion")}</Link>
             </div>
-            <p className="text-sm mt-4 md:mt-0">© 2025 Aiworkpay. Tous droits réservés.</p>
+            <p className="text-sm mt-4 md:mt-0">{t("© 2026 Aiworkpay. Tous droits réservés.")}</p>
           </div>
         </div>
       </footer>

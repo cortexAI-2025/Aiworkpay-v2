@@ -1,9 +1,12 @@
+import { getI18n } from '@/lib/i18n/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import MissionCard from '@/components/MissionCard';
 
 export default async function DashboardPage() {
+  const { t, formatLocale } = await getI18n();
+
   const session = await auth();
   if (!session?.user) return null;
 
@@ -35,10 +38,10 @@ export default async function DashboardPage() {
   const isConnected = user?.stripeAccountOnboarded ?? false;
 
   const stats = [
-    { label: 'Missions disponibles', value: availableCount, icon: '📋', color: 'bg-blue-50 text-blue-600' },
-    { label: 'En cours', value: myMissions.length, icon: '🎯', color: 'bg-purple-50 text-purple-600' },
-    { label: 'Total gagné', value: `${totalEarned.toLocaleString('fr-FR')} €`, icon: '💸', color: 'bg-green-50 text-green-600' },
-    { label: 'Paiements', value: isConnected ? 'Actifs' : 'À configurer', icon: '⚡', color: isConnected ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600' },
+    { label: t("Missions disponibles"), value: availableCount, icon: '📋', color: 'bg-blue-50 text-blue-600' },
+    { label: t("En cours"), value: myMissions.length, icon: '🎯', color: 'bg-purple-50 text-purple-600' },
+    { label: t("Total gagné"), value: `${totalEarned.toLocaleString(formatLocale)} €`, icon: '💸', color: 'bg-green-50 text-green-600' },
+    { label: t("Paiements"), value: isConnected ? t("Actifs") : t("À configurer"), icon: '⚡', color: isConnected ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600' },
   ];
 
   return (
@@ -46,12 +49,11 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Bonjour 👋</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("Bonjour 👋")}</h1>
           <p className="text-gray-500 mt-1">{session.user.email}</p>
         </div>
         <Link href="/dashboard/missions" className="btn-primary mt-4 sm:mt-0">
-          Voir les missions →
-        </Link>
+          {t("Voir les missions →")}</Link>
       </div>
 
       {/* Stripe Connect banner */}
@@ -59,10 +61,10 @@ export default async function DashboardPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start space-x-3">
           <span className="text-amber-600 text-xl flex-shrink-0">💳</span>
           <div className="flex-1">
-            <p className="font-semibold text-amber-800">Configurez vos paiements</p>
+            <p className="font-semibold text-amber-800">{t("Configurez vos paiements")}</p>
             <p className="text-amber-700 text-sm mt-0.5">
-              Connectez votre compte Stripe pour recevoir 90 % du budget des missions complétées.{' '}
-              <Link href="/dashboard/account" className="underline font-medium">Configurer maintenant →</Link>
+              {t("Connectez votre compte Stripe pour recevoir 90 % du budget des missions complétées.")}{' '}
+              <Link href="/dashboard/account" className="underline font-medium">{t("Configurer maintenant →")}</Link>
             </p>
           </div>
         </div>
@@ -84,7 +86,7 @@ export default async function DashboardPage() {
       {/* My active missions */}
       {myMissions.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Mes missions en cours</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("Mes missions en cours")}</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {myMissions.map((m) => (
               <MissionCard
@@ -99,13 +101,12 @@ export default async function DashboardPage() {
       {/* Available missions */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Missions disponibles</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t("Missions disponibles")}</h2>
           <Link href="/dashboard/missions" className="text-sm text-brand hover:text-brand-dark font-medium">
-            Voir toutes →
-          </Link>
+            {t("Voir toutes →")}</Link>
         </div>
         {missions.length === 0 ? (
-          <div className="card text-center py-10 text-gray-500">Aucune mission disponible pour le moment.</div>
+          <div className="card text-center py-10 text-gray-500">{t("Aucune mission disponible pour le moment.")}</div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {missions.slice(0, 4).map((m) => (

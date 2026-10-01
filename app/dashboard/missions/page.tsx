@@ -1,3 +1,4 @@
+import { getI18n } from '@/lib/i18n/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import MissionCard from '@/components/MissionCard';
@@ -14,6 +15,8 @@ export default async function MissionsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const { t } = await getI18n();
+
   const session = await auth();
   if (!session?.user) return null;
 
@@ -51,27 +54,27 @@ export default async function MissionsPage({
       <div className="card">
         <form className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Statut</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t("Statut")}</label>
             <select name="status" defaultValue={params.status || ''} className="input py-2 text-sm">
-              <option value="">Tous</option>
-              <option value="PUBLISHED">Publiée</option>
-              <option value="ASSIGNED">Assignée</option>
-              <option value="IN_PROGRESS">En cours</option>
-              <option value="DELIVERED">Livrée</option>
-              <option value="COMPLETED">Terminée</option>
+              <option value="">{t("Tous")}</option>
+              <option value="PUBLISHED">{t("Publiée")}</option>
+              <option value="ASSIGNED">{t("Assignée")}</option>
+              <option value="IN_PROGRESS">{t("En cours")}</option>
+              <option value="DELIVERED">{t("Livrée")}</option>
+              <option value="COMPLETED">{t("Terminée")}</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Priorité</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t("Priorité")}</label>
             <select name="priority" defaultValue={params.priority || ''} className="input py-2 text-sm">
-              <option value="">Toutes</option>
-              <option value="HIGH">Haute</option>
-              <option value="MEDIUM">Moyenne</option>
-              <option value="LOW">Faible</option>
+              <option value="">{t("Toutes")}</option>
+              <option value="HIGH">{t("Haute")}</option>
+              <option value="MEDIUM">{t("Moyenne")}</option>
+              <option value="LOW">{t("Faible")}</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Budget min. (€)</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t("Budget min. (€)")}</label>
             <input
               type="number"
               name="minBudget"
@@ -81,18 +84,17 @@ export default async function MissionsPage({
               className="input py-2 text-sm w-32"
             />
           </div>
-          <button type="submit" className="btn-primary py-2 px-4 text-sm">Filtrer</button>
-          <Link href="/dashboard/missions" className="btn-secondary py-2 px-4 text-sm">Réinitialiser</Link>
+          <button type="submit" className="btn-primary py-2 px-4 text-sm">{t("Filtrer")}</button>
+          <Link href="/dashboard/missions" className="btn-secondary py-2 px-4 text-sm">{t("Réinitialiser")}</Link>
         </form>
       </div>
 
       {missions.length === 0 ? (
         <div className="card text-center py-16">
           <div className="text-4xl mb-4">📭</div>
-          <p className="text-gray-500 text-lg">Aucune mission ne correspond à vos filtres.</p>
+          <p className="text-gray-500 text-lg">{t("Aucune mission ne correspond à vos filtres.")}</p>
           <Link href="/dashboard/missions" className="text-brand hover:text-brand-dark mt-2 inline-block">
-            Voir toutes les missions
-          </Link>
+            {t("Voir toutes les missions")}</Link>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

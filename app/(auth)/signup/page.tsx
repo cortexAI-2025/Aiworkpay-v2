@@ -1,9 +1,16 @@
 'use client';
+import { useI18n } from '@/components/LanguageProvider';
+
 
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+
+
+
+export default function SignupPage() {
+  const { t } = useI18n();
 
 const providers = [
   {
@@ -47,7 +54,6 @@ const providers = [
   },
 ];
 
-export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,11 +79,11 @@ export default function SignupPage() {
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Les mots de passe ne correspondent pas.');
+      setError(t("Les mots de passe ne correspondent pas."));
       return;
     }
     if (password.length < 8) {
-      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      setError(t("Le mot de passe doit contenir au moins 8 caractères."));
       return;
     }
 
@@ -90,19 +96,19 @@ export default function SignupPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Erreur lors de l'inscription");
+        setError(data.error || t("Erreur lors de l'inscription"));
         return;
       }
       // Auto sign-in after account creation
       const result = await signIn('credentials', { email, password, redirect: false });
       if (result?.error) {
-        setError('Compte créé. Veuillez vous connecter.');
+        setError(t("Compte créé. Veuillez vous connecter."));
         router.push('/login');
       } else {
         router.push('/dashboard');
       }
     } catch {
-      setError('Erreur réseau, veuillez réessayer.');
+      setError(t("Erreur réseau, veuillez réessayer."));
     } finally {
       setLoading(false);
     }
@@ -111,10 +117,10 @@ export default function SignupPage() {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-8">
       <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Créer un compte</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("Créer un compte")}</h1>
         <p className="text-gray-500 text-sm">
-          Rejoignez la communauté Payworker —{' '}
-          <span className="text-green-600 font-semibold">100% gratuit</span>
+          {t("Rejoignez la communauté Payworker —")}{' '}
+          <span className="text-green-600 font-semibold">{t("100% gratuit")}</span>
         </p>
       </div>
 
@@ -145,13 +151,12 @@ export default function SignupPage() {
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
         </svg>
-        Continuer avec un numéro de téléphone
-      </Link>
+        {t("Continuer avec un numéro de téléphone")}</Link>
 
       {/* Divider */}
       <div className="flex items-center gap-3 mb-6">
         <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400 font-medium">ou avec email</span>
+        <span className="text-xs text-gray-400 font-medium">{t("ou avec email")}</span>
         <div className="flex-1 h-px bg-gray-200" />
       </div>
 
@@ -170,24 +175,24 @@ export default function SignupPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="input"
-            placeholder="vous@exemple.com"
+            placeholder={t("vous@exemple.com")}
             autoComplete="email"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t("Mot de passe")}</label>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="input"
-            placeholder="Min. 8 caractères"
+            placeholder={t("Min. 8 caractères")}
             autoComplete="new-password"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Confirmer le mot de passe</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t("Confirmer le mot de passe")}</label>
           <input
             type="password"
             required
@@ -199,19 +204,18 @@ export default function SignupPage() {
           />
         </div>
         <p className="text-xs text-gray-500">
-          En vous inscrivant, vous acceptez nos{' '}
-          <Link href="/contact" className="text-brand hover:underline">CGU</Link>.
+          {t("En vous inscrivant, vous acceptez nos")}{' '}
+          <Link href="/contact" className="text-brand hover:underline">{t("CGU")}</Link>.
         </p>
         <button type="submit" disabled={loading} className="btn-primary w-full">
-          {loading ? 'Création du compte...' : 'Créer mon compte gratuit'}
+          {loading ? t("Création du compte...") : t("Créer mon compte gratuit")}
         </button>
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Déjà un compte ?{' '}
+        {t("Déjà un compte ?")}{' '}
         <Link href="/login" className="text-brand font-semibold hover:text-brand-dark transition-colors">
-          Se connecter
-        </Link>
+          {t("Se connecter")}</Link>
       </p>
     </div>
   );

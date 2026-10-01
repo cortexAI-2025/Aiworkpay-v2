@@ -1,4 +1,6 @@
 'use client';
+import { useI18n } from '@/components/LanguageProvider';
+
 
 import { useState, useEffect } from 'react';
 
@@ -15,16 +17,22 @@ interface ApiKey {
   createdAt: string;
 }
 
-const SCOPES: { id: string; label: string }[] = [
-  { id: 'missions:read', label: 'Lire ses missions et résultats' },
-  { id: 'missions:write', label: 'Créer et annuler des missions' },
-  { id: 'missions:approve', label: 'Valider (paie le Payworker) ou demander des corrections' },
-];
 
-const optionalNumber = (value: string) => (value.trim() === '' ? undefined : Number(value));
-const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString('fr-FR') : null);
+
+
+
 
 export default function AdminSection() {
+  const { t, formatLocale } = useI18n();
+
+const SCOPES: { id: string; label: string }[] = [
+  { id: 'missions:read', label: t("Lire ses missions et résultats") },
+  { id: 'missions:write', label: t("Créer et annuler des missions") },
+  { id: 'missions:approve', label: t("Valider (paie le Payworker) ou demander des corrections") },
+];
+const optionalNumber = (value: string) => (value.trim() === '' ? undefined : Number(value));
+const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString(formatLocale) : null);
+
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [label, setLabel] = useState('');
   const [scopes, setScopes] = useState<string[]>(['missions:read', 'missions:write']);
@@ -79,7 +87,7 @@ export default function AdminSection() {
       setMonthlyBudget('');
       fetchKeys();
     } else {
-      setError(data.error || 'Création impossible');
+      setError(data.error || t("Création impossible"));
     }
     setCreating(false);
   };
@@ -99,15 +107,14 @@ export default function AdminSection() {
     <div className="card border-indigo-200">
       <h2 className="font-semibold text-gray-900 mb-4">
         <span className="status-badge bg-indigo-100 text-indigo-700 mr-2">ADMIN</span>
-        Gestion des clés API
-      </h2>
+        {t("Gestion des clés API")}</h2>
 
       <form onSubmit={handleCreate} className="space-y-3 mb-6">
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="Nom de l'agent (ex: Agent GPT-4)"
+          placeholder={t("Nom de l'agent (ex: Agent GPT-4)")}
           className="input w-full"
           required
         />
@@ -122,45 +129,40 @@ export default function AdminSection() {
         </fieldset>
         <div className="grid md:grid-cols-3 gap-3">
           <label className="text-sm text-gray-700">
-            Plafond par mission
-            <input type="number" min="0.01" step="0.01" value={maxMissionBudget} onChange={(e) => setMaxMissionBudget(e.target.value)} className="input mt-1" placeholder="Aucun" />
+            {t("Plafond par mission")}<input type="number" min="0.01" step="0.01" value={maxMissionBudget} onChange={(e) => setMaxMissionBudget(e.target.value)} className="input mt-1" placeholder={t('Aucun')} />
           </label>
           <label className="text-sm text-gray-700">
-            Budget mensuel
-            <input type="number" min="0.01" step="0.01" value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} className="input mt-1" placeholder="Aucun" />
+            {t("Budget mensuel")}<input type="number" min="0.01" step="0.01" value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} className="input mt-1" placeholder={t('Aucun')} />
           </label>
           <label className="text-sm text-gray-700">
-            Expire dans (jours)
-            <input type="number" min="1" step="1" value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)} className="input mt-1" placeholder="Jamais" />
+            {t("Expire dans (jours)")}<input type="number" min="1" step="1" value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)} className="input mt-1" placeholder={t('Jamais')} />
           </label>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600">{t(error)}</p>}
         <button type="submit" disabled={creating || scopes.length === 0} className="btn-primary whitespace-nowrap disabled:opacity-50">
-          {creating ? '...' : '+ Créer la clé'}
+          {creating ? '...' : t("+ Créer la clé")}
         </button>
       </form>
 
       {newKey && (
         <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-300">
           <p className="text-sm font-medium text-amber-900 mb-2">
-            Clé de « {newKey.label} » : copiez-la maintenant, elle ne sera plus jamais affichée.
-          </p>
+            {t("Clé de «")}{newKey.label} {t("» : copiez-la maintenant, elle ne sera plus jamais affichée.")}</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 min-w-0 font-mono text-xs break-all bg-white p-2 rounded border border-amber-200">{newKey.key}</code>
             <button type="button" onClick={copyNewKey} className="text-xs text-brand font-medium whitespace-nowrap">
-              {copied ? '✓ Copié' : 'Copier'}
+              {copied ? t("✓ Copié") : t("Copier")}
             </button>
             <button type="button" onClick={() => setNewKey(null)} className="text-xs text-gray-500 whitespace-nowrap">
-              Masquer
-            </button>
+              {t("Masquer")}</button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-gray-500 text-sm">Chargement...</p>
+        <p className="text-gray-500 text-sm">{t("Chargement...")}</p>
       ) : keys.length === 0 ? (
-        <p className="text-gray-500 text-sm text-center py-4">Aucune clé API créée.</p>
+        <p className="text-gray-500 text-sm text-center py-4">{t("Aucune clé API créée.")}</p>
       ) : (
         <div className="space-y-3">
           {keys.map((k) => {
@@ -173,22 +175,21 @@ export default function AdminSection() {
                   <div className="text-xs text-gray-500 mt-1">
                     {k.scopes.join(', ')}
                     {k.maxMissionBudget && ` · max ${Number(k.maxMissionBudget)} / mission`}
-                    {k.monthlyBudget && ` · ${Number(k.monthlyBudget)} / mois`}
-                    {k.expiresAt && ` · expire le ${formatDate(k.expiresAt)}`}
-                    {` · ${k.lastUsedAt ? `utilisée le ${formatDate(k.lastUsedAt)}` : 'jamais utilisée'}`}
+                    {k.monthlyBudget && ` · ${Number(k.monthlyBudget)} / ${t('mois')}`}
+                    {k.expiresAt && ` · ${t('Expire le')} ${formatDate(k.expiresAt)}`}
+                    {` · ${k.lastUsedAt ? `${t('Utilisée le')} ${formatDate(k.lastUsedAt)}` : t("jamais utilisée")}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className={`status-badge ${k.active && !expired ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {!k.active ? 'Révoquée' : expired ? 'Expirée' : 'Active'}
+                    {!k.active ? t("Révoquée") : expired ? t("Expirée") : 'Active'}
                   </span>
                   {k.active && (
                     <button
                       onClick={() => handleRevoke(k.id)}
                       className="text-xs text-red-600 hover:text-red-700 font-medium"
                     >
-                      Révoquer
-                    </button>
+                      {t("Révoquer")}</button>
                   )}
                 </div>
               </div>

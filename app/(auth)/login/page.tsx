@@ -1,9 +1,16 @@
 'use client';
+import { useI18n } from '@/components/LanguageProvider';
+
 
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+
+
+
+export default function LoginPage() {
+  const { t } = useI18n();
 
 const providers = [
   {
@@ -47,7 +54,6 @@ const providers = [
   },
 ];
 
-export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -78,7 +84,7 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (result?.error) {
-      setError('Email ou mot de passe incorrect.');
+      setError(t("Email ou mot de passe incorrect."));
     } else {
       router.push('/dashboard');
     }
@@ -87,8 +93,8 @@ export default function LoginPage() {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-8">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Connexion</h1>
-        <p className="text-gray-500 text-sm">Accédez à votre espace Payworker</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("Connexion")}</h1>
+        <p className="text-gray-500 text-sm">{t("Accédez à votre espace Payworker")}</p>
       </div>
 
       {/* OAuth providers */}
@@ -113,7 +119,7 @@ export default function LoginPage() {
       {/* Divider */}
       <div className="flex items-center gap-3 mb-6">
         <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400 font-medium">ou avec email</span>
+        <span className="text-xs text-gray-400 font-medium">{t("ou avec email")}</span>
         <div className="flex-1 h-px bg-gray-200" />
       </div>
 
@@ -132,12 +138,12 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="input"
-            placeholder="vous@exemple.com"
+            placeholder={t("vous@exemple.com")}
             autoComplete="email"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t("Mot de passe")}</label>
           <input
             type="password"
             required
@@ -150,11 +156,10 @@ export default function LoginPage() {
         </div>
         <div className="flex justify-end">
           <Link href="/reset-password" className="text-sm text-brand hover:text-brand-dark transition-colors">
-            Mot de passe oublié ?
-          </Link>
+            {t("Mot de passe oublié ?")}</Link>
         </div>
         <button type="submit" disabled={loading} className="btn-primary w-full">
-          {loading ? 'Connexion...' : 'Se connecter'}
+          {loading ? t("Connexion...") : t("Se connecter")}
         </button>
       </form>
 
@@ -167,15 +172,13 @@ export default function LoginPage() {
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
           </svg>
-          Continuer avec un numéro de téléphone
-        </Link>
+          {t("Continuer avec un numéro de téléphone")}</Link>
       </div>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Pas encore de compte ?{' '}
+        {t("Pas encore de compte ?")}{' '}
         <Link href="/signup" className="text-brand font-semibold hover:text-brand-dark transition-colors">
-          S&apos;inscrire gratuitement
-        </Link>
+          {t("S'inscrire gratuitement")}</Link>
       </p>
     </div>
   );

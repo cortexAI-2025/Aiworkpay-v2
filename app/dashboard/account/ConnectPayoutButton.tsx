@@ -1,4 +1,6 @@
 'use client';
+import { useI18n } from '@/components/LanguageProvider';
+
 
 import { useState } from 'react';
 
@@ -8,6 +10,8 @@ interface Props {
 }
 
 export default function ConnectPayoutButton({ isOnboarded, hasAccount }: Props) {
+  const { t } = useI18n();
+
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -32,7 +36,7 @@ export default function ConnectPayoutButton({ isOnboarded, hasAccount }: Props) 
       if (data.onboarded) {
         window.location.reload();
       } else {
-        alert("Votre compte Stripe n'est pas encore validé. Veuillez compléter l'onboarding.");
+        alert(t("Votre compte Stripe n'est pas encore validé. Veuillez compléter l'onboarding."));
       }
     } catch {
       console.error('Status check error');
@@ -45,7 +49,7 @@ export default function ConnectPayoutButton({ isOnboarded, hasAccount }: Props) 
     return (
       <div className="flex gap-3">
         <button onClick={handleConnect} disabled={loading} className="btn-secondary flex-1">
-          {loading ? 'Chargement...' : '⚙️ Gérer mon compte Stripe'}
+          {loading ? t("Chargement...") : t("⚙️ Gérer mon compte Stripe")}
         </button>
       </div>
     );
@@ -54,7 +58,7 @@ export default function ConnectPayoutButton({ isOnboarded, hasAccount }: Props) 
   return (
     <div className="flex gap-3">
       <button onClick={handleConnect} disabled={loading} className="btn-primary flex-1">
-        {loading ? 'Chargement...' : '💳 Configurer mes paiements Stripe →'}
+        {loading ? t("Chargement...") : t("💳 Configurer mes paiements Stripe →")}
       </button>
       {hasAccount && (
         <button onClick={handleCheckStatus} disabled={checking} className="btn-secondary px-4">

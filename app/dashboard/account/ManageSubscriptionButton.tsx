@@ -1,8 +1,12 @@
 'use client';
+import { useI18n } from '@/components/LanguageProvider';
+
 
 import { useState } from 'react';
 
 export default function ManageSubscriptionButton() {
+  const { t } = useI18n();
+
   const [loading, setLoading] = useState(false);
 
   const handleManage = async () => {
@@ -26,7 +30,7 @@ export default function ManageSubscriptionButton() {
       disabled={loading}
       className="btn-secondary flex-1"
     >
-      {loading ? 'Chargement...' : '⚙️ Gérer mon abonnement'}
+      {loading ? t("Chargement...") : t("⚙️ Gérer mon abonnement")}
     </button>
   );
 }

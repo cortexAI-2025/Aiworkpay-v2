@@ -1,28 +1,35 @@
+import { getI18n } from '@/lib/i18n/server';
 import RetryPayout from './RetryPayout';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 
-const typeLabels: Record<string, string> = {
-  AGENT_PAYMENT: 'Paiement agent',
-  PAYWORKER_PAYOUT: 'Virement Payworker',
-  PLATFORM_FEE: 'Commission plateforme',
-  SUBSCRIPTION: 'Abonnement',
-  MISSION_PAYOUT: 'Paiement mission',
-};
 
+
+
+
+
+
+export default async function TransactionsPage() {
+  const { t, formatLocale } = await getI18n();
+
+const typeLabels: Record<string, string> = {
+  AGENT_PAYMENT: t("Paiement agent"),
+  PAYWORKER_PAYOUT: t("Virement Payworker"),
+  PLATFORM_FEE: t("Commission plateforme"),
+  SUBSCRIPTION: 'Abonnement',
+  MISSION_PAYOUT: t("Paiement mission"),
+};
 const statusColors: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-700',
   SUCCEEDED: 'bg-green-100 text-green-700',
   FAILED: 'bg-red-100 text-red-700',
 };
-
 const statusLabels: Record<string, string> = {
-  PENDING: 'En attente',
-  SUCCEEDED: 'Réussi',
-  FAILED: 'Échoué',
+  PENDING: t("En attente"),
+  SUCCEEDED: t("Réussi"),
+  FAILED: t("Échoué"),
 };
 
-export default async function TransactionsPage() {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -49,19 +56,19 @@ export default async function TransactionsPage() {
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Total perçu (90 %)</div>
+          <div className="text-sm text-gray-500 mb-1">{t("Total perçu (90 %)")}</div>
           <div className="text-2xl font-bold text-green-600">
-            {totalEarned.toLocaleString('fr-FR')} €
+            {totalEarned.toLocaleString(formatLocale)} €
           </div>
         </div>
         <div className="card">
-          <div className="text-sm text-gray-500 mb-1">En attente de virement</div>
+          <div className="text-sm text-gray-500 mb-1">{t("En attente de virement")}</div>
           <div className="text-2xl font-bold text-yellow-600">
-            {pendingPayout.toLocaleString('fr-FR')} €
+            {pendingPayout.toLocaleString(formatLocale)} €
           </div>
         </div>
         <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Opérations</div>
+          <div className="text-sm text-gray-500 mb-1">{t("Opérations")}</div>
           <div className="text-2xl font-bold text-gray-900">{transactions.length}</div>
         </div>
       </div>
@@ -69,7 +76,7 @@ export default async function TransactionsPage() {
       {transactions.length === 0 ? (
         <div className="card text-center py-16">
           <div className="text-4xl mb-4">💳</div>
-          <p className="text-gray-500">Aucune transaction pour le moment.</p>
+          <p className="text-gray-500">{t("Aucune transaction pour le moment.")}</p>
         </div>
       ) : (
         <div className="card p-0 overflow-hidden">
@@ -80,15 +87,15 @@ export default async function TransactionsPage() {
                   <th className="text-left px-6 py-4 font-semibold text-gray-700">Date</th>
                   <th className="text-left px-6 py-4 font-semibold text-gray-700">Type</th>
                   <th className="text-left px-6 py-4 font-semibold text-gray-700">Mission</th>
-                  <th className="text-left px-6 py-4 font-semibold text-gray-700">Montant</th>
-                  <th className="text-left px-6 py-4 font-semibold text-gray-700">Statut</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-700">{t("Montant")}</th>
+                  <th className="text-left px-6 py-4 font-semibold text-gray-700">{t("Statut")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {transactions.map((t) => (
                   <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-gray-600">
-                      {new Date(t.createdAt).toLocaleDateString('fr-FR')}
+                      {new Date(t.createdAt).toLocaleDateString(formatLocale)}
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-800">
                       {typeLabels[t.type] || t.type}
@@ -97,7 +104,7 @@ export default async function TransactionsPage() {
                       {t.mission?.title || '—'}
                     </td>
                     <td className="px-6 py-4 font-semibold text-gray-900">
-                      {Number(t.amount).toLocaleString('fr-FR')} {t.currency}
+                      {Number(t.amount).toLocaleString(formatLocale)} {t.currency}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`status-badge ${statusColors[t.status]}`}>

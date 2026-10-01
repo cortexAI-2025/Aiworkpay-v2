@@ -1,19 +1,32 @@
+import { getI18n } from '@/lib/i18n/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import MissionActions from './MissionActions';
 
-const priorityLabel: Record<string, string> = { LOW: 'Faible', MEDIUM: 'Moyen', HIGH: 'Haute' };
+
+
+
+
+
+export default async function MissionDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { t, formatLocale } = await getI18n();
+
+const priorityLabel: Record<string, string> = { LOW: t("Faible"), MEDIUM: t("Moyen"), HIGH: t("Haute") };
 const priorityColor: Record<string, string> = {
   LOW: 'bg-green-100 text-green-800',
   MEDIUM: 'bg-yellow-100 text-yellow-800',
   HIGH: 'bg-red-100 text-red-800',
 };
 const statusLabels: Record<string, string> = {
-  PAYMENT_PENDING: 'Paiement en attente',
-  CREATED: 'Créée', PUBLISHED: 'Publiée', ASSIGNED: 'Assignée',
-  IN_PROGRESS: 'En cours', DELIVERED: 'Livrée', COMPLETED: 'Terminée', CANCELED: 'Annulée',
+  PAYMENT_PENDING: t("Paiement en attente"),
+  CREATED: t("Créée"), PUBLISHED: t("Publiée"), ASSIGNED: t("Assignée"),
+  IN_PROGRESS: t("En cours"), DELIVERED: t("Livrée"), COMPLETED: t("Terminée"), CANCELED: t("Annulée"),
 };
 const statusColors: Record<string, string> = {
   PAYMENT_PENDING: 'bg-orange-100 text-orange-700',
@@ -23,11 +36,6 @@ const statusColors: Record<string, string> = {
   CANCELED: 'bg-red-100 text-red-700',
 };
 
-export default async function MissionDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -82,8 +90,7 @@ export default async function MissionDetailPage({
         <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        Retour aux missions
-      </Link>
+        {t("Retour aux missions")}</Link>
 
       {/* Header */}
       <div className="card">
@@ -95,17 +102,17 @@ export default async function MissionDetailPage({
                 {statusLabels[mission.status]}
               </span>
               <span className={`status-badge ${priorityColor[mission.priority]}`}>
-                Priorité {priorityLabel[mission.priority]}
+                {t("Priorité")}{priorityLabel[mission.priority]}
               </span>
             </div>
           </div>
           <div className="text-right ml-4">
             <div className="text-3xl font-extrabold text-green-600">
-              {Number(mission.budget).toLocaleString('fr-FR')} {mission.currency}
+              {Number(mission.budget).toLocaleString(formatLocale)} {mission.currency}
             </div>
             {showCommission && (
               <div className="text-sm text-green-700 font-medium mt-1">
-                Vous recevez : {payworkerEarning.toLocaleString('fr-FR')} {mission.currency}
+                {t("Vous recevez :")}{payworkerEarning.toLocaleString(formatLocale)} {mission.currency}
                 <span className="text-xs text-gray-400 ml-1">(90 %)</span>
               </div>
             )}
@@ -120,24 +127,24 @@ export default async function MissionDetailPage({
       <div className="grid md:grid-cols-3 gap-4">
         <div className="card text-center">
           <div className="text-2xl mb-1">📅</div>
-          <div className="text-xs text-gray-500 mb-1">Date limite</div>
+          <div className="text-xs text-gray-500 mb-1">{t("Date limite")}</div>
           <div className={`font-semibold text-sm ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
-            {deadlineDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {deadlineDate.toLocaleDateString(formatLocale, { day: '2-digit', month: 'long', year: 'numeric' })}
             {isOverdue && ' ⚠️'}
           </div>
         </div>
         <div className="card text-center">
           <div className="text-2xl mb-1">🤖</div>
-          <div className="text-xs text-gray-500 mb-1">Créée par</div>
+          <div className="text-xs text-gray-500 mb-1">{t("Créée par")}</div>
           <div className="font-semibold text-sm text-gray-900">
             {mission.createdByApiKey?.label || 'Utilisateur'}
           </div>
         </div>
         <div className="card text-center">
           <div className="text-2xl mb-1">👷</div>
-          <div className="text-xs text-gray-500 mb-1">Assignée à</div>
+          <div className="text-xs text-gray-500 mb-1">{t("Assignée à")}</div>
           <div className="font-semibold text-sm text-gray-900 truncate">
-            {mission.assignedTo?.email || 'Non assignée'}
+            {mission.assignedTo?.email || t("Non assignée")}
           </div>
         </div>
       </div>
@@ -145,7 +152,7 @@ export default async function MissionDetailPage({
       {/* Attachments */}
       {briefAttachments.length > 0 && (
         <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-3">Pièces jointes</h2>
+          <h2 className="font-semibold text-gray-900 mb-3">{t("Pièces jointes")}</h2>
           <div className="space-y-2">
             {briefAttachments.map((att) => (
               <a
@@ -167,19 +174,19 @@ export default async function MissionDetailPage({
       {/* Changes requested by the agent */}
       {isAssignedToMe && mission.status === 'IN_PROGRESS' && mission.revisionFeedback && (
         <div className="card border-amber-300 bg-amber-50">
-          <h2 className="font-semibold text-amber-900 mb-2">Corrections demandées par l&apos;agent</h2>
+          <h2 className="font-semibold text-amber-900 mb-2">{t("Corrections demandées par l'agent")}</h2>
           <div className="text-amber-900 whitespace-pre-wrap text-sm leading-relaxed">{mission.revisionFeedback}</div>
-          <p className="text-xs text-amber-700 mt-2">Livrez à nouveau la mission ci-dessous ; vos nouvelles preuves remplacent les précédentes.</p>
+          <p className="text-xs text-amber-700 mt-2">{t("Livrez à nouveau la mission ci-dessous ; vos nouvelles preuves remplacent les précédentes.")}</p>
         </div>
       )}
 
       {/* Delivered result */}
       {canSeeResult && mission.resultNote && (
         <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-1">Résultat livré</h2>
+          <h2 className="font-semibold text-gray-900 mb-1">{t("Résultat livré")}</h2>
           {mission.deliveredAt && (
             <p className="text-xs text-gray-500 mb-3">
-              {new Date(mission.deliveredAt).toLocaleString('fr-FR')}
+              {new Date(mission.deliveredAt).toLocaleString(formatLocale)}
             </p>
           )}
           <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">{mission.resultNote}</div>
@@ -207,9 +214,9 @@ export default async function MissionDetailPage({
                   <a href={proofHref(att)} target="_blank" rel="noopener noreferrer" className="text-sm text-brand underline break-all">
                     📎 {att.filename}
                   </a>
-                  {att.size && <span className="text-xs text-gray-400 ml-2">{(att.size / 1024).toFixed(0)} Ko</span>}
-                  {att.scanStatus === 'CLEAN' && <span className="text-xs text-green-700 ml-2">✓ analysé par l&apos;antivirus</span>}
-                  {att.scanStatus === 'NOT_SCANNED' && <span className="text-xs text-amber-700 ml-2">⚠ non analysé</span>}
+                  {att.size && <span className="text-xs text-gray-400 ml-2">{(att.size / 1024).toFixed(0)} {t("Ko")}</span>}
+                  {att.scanStatus === 'CLEAN' && <span className="text-xs text-green-700 ml-2">{t("✓ analysé par l'antivirus")}</span>}
+                  {att.scanStatus === 'NOT_SCANNED' && <span className="text-xs text-amber-700 ml-2">{t("⚠ non analysé")}</span>}
                 </li>
               ))}
             </ul>

@@ -70,31 +70,33 @@ async function handleMissionPaymentSucceeded(pi: Stripe.PaymentIntent) {
   const missionId = pi.metadata?.missionId;
   if (!missionId) return;
 
-  const mission = await prisma.mission.findUnique({ where: { id: missionId } });
-  if (!mission) return;
-
-  // Paid after the mission was canceled (agent or admin cancel racing the
-  // payment, expired page): nobody will do the work, give the money back.
-  if (mission.status === 'CANCELED') {
-    await stripe.refunds.create(
-      { payment_intent: pi.id, reason: 'requested_by_customer' },
-      { idempotencyKey: `mission_refund_${missionId}` }
-    );
-    return;
-  }
-  if (mission.status !== 'PAYMENT_PENDING') return;
-
-  // Publish the mission — payment confirmed. A mission paid through Checkout
-  // learns its PaymentIntent only now; it is needed to refund a cancelation.
-  await prisma.mission.update({
-    where: { id: missionId },
+  // Atomic status transition — if another handler already processed this event
+  // (Stripe duplicate delivery), updateMany returns count=0 and we stop here.
+  const { count } = await prisma.mission.updateMany({
+    where: { id: missionId, status: 'PAYMENT_PENDING' },
     data: { status: 'PUBLISHED', stripePaymentIntentId: pi.id },
   });
 
+  // Handle payment arriving after a cancellation
+  if (count === 0) {
+    const mission = await prisma.mission.findUnique({ where: { id: missionId }, select: { status: true } });
+    if (mission?.status === 'CANCELED') {
+      await stripe.refunds.create(
+        { payment_intent: pi.id, reason: 'requested_by_customer' },
+        { idempotencyKey: `mission_refund_${missionId}` }
+      );
+    }
+    return;
+  }
+
   // Determine which user to associate with the AGENT_PAYMENT transaction.
-  // Use the creator user if available, otherwise find via apiKey owner.
-  let userId = mission.createdByUserId;
-  if (!userId && mission.createdByApiKeyId) {
+  const mission = await prisma.mission.findUnique({
+    where: { id: missionId },
+    select: { createdByUserId: true, createdByApiKeyId: true },
+  });
+
+  let userId = mission?.createdByUserId ?? null;
+  if (!userId && mission?.createdByApiKeyId) {
     const apiKey = await prisma.apiKey.findUnique({
       where: { id: mission.createdByApiKeyId },
       select: { createdByUserId: true },
@@ -102,7 +104,6 @@ async function handleMissionPaymentSucceeded(pi: Stripe.PaymentIntent) {
     userId = apiKey?.createdByUserId ?? null;
   }
 
-  // Only create a transaction when we have a traceable user
   if (userId) {
     await prisma.transaction.create({
       data: {

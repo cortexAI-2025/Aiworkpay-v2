@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { hit, clientIp, LIMITS } from '@/lib/rateLimit';
 
 const signupSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -9,6 +10,14 @@ const signupSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const rl = await hit(`signup:${clientIp(request)}`, LIMITS.signup);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Trop de tentatives, réessayez plus tard.' }, {
+      status: 429,
+      headers: { 'Retry-After': String(rl.retryAfter) },
+    });
+  }
+
   try {
     const body = await request.json();
     const parsed = signupSchema.safeParse(body);

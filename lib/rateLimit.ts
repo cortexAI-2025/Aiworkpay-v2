@@ -27,6 +27,12 @@ export const LIMITS = {
   missionCreations: { max: envInt('RATE_LIMIT_CREATIONS_PER_HOUR', 30), windowSeconds: 3600 },
   /** Failed authentications, per IP address: slows down key guessing. */
   authFailures: { max: envInt('RATE_LIMIT_AUTH_FAILURES_PER_10_MIN', 20), windowSeconds: 600 },
+  /** Account creation, per IP. */
+  signup: { max: envInt('RATE_LIMIT_SIGNUP_PER_HOUR', 10), windowSeconds: 3600 },
+  /** Password reset requests, per IP. */
+  passwordReset: { max: envInt('RATE_LIMIT_PASSWORD_RESET_PER_HOUR', 5), windowSeconds: 3600 },
+  /** Contact form submissions, per IP. */
+  contactForm: { max: envInt('RATE_LIMIT_CONTACT_PER_HOUR', 5), windowSeconds: 3600 },
 } satisfies Record<string, Limit>;
 
 export interface RateDecision {

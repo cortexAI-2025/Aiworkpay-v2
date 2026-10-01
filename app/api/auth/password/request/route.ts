@@ -3,10 +3,18 @@ import { createHash, randomBytes } from 'crypto';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
+import { hit, clientIp, LIMITS } from '@/lib/rateLimit';
 
 const schema = z.object({ email: z.string().email() });
 
 export async function POST(request: NextRequest) {
+  const rl = await hit(`pwreset:${clientIp(request)}`, LIMITS.passwordReset);
+  if (!rl.allowed) {
+    return NextResponse.json({ message: 'Si ce compte existe, un email a été envoyé.' }, {
+      headers: { 'Retry-After': String(rl.retryAfter) },
+    });
+  }
+
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Email invalide' }, { status: 400 });
 

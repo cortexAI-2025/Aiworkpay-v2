@@ -142,7 +142,7 @@ livraison, depuis le tableau de bord ou via l'API (session) :
 
 | Route | Effet |
 | --- | --- |
-| `POST /api/missions/{id}/proofs` (multipart, champ `file`) | Ajoute un fichier : JPEG, PNG, WebP, HEIC ou PDF, 10 Mo au maximum, 20 fichiers par mission. Le type est vérifié sur le **contenu** du fichier, pas sur son nom (`415 UNSUPPORTED_FILE_TYPE`). |
+| `POST /api/missions/{id}/proofs` (multipart, champ `file`) | Ajoute un fichier : JPEG, PNG, WebP, HEIC ou PDF, 10 Mo au maximum, 20 fichiers par mission. Le type est vérifié sur le **contenu** du fichier, pas sur son nom (`415 UNSUPPORTED_FILE_TYPE`), puis le fichier est analysé par l'antivirus. |
 | `DELETE /api/missions/{id}/proofs/{proofId}` | Retire un fichier tant que la mission est en cours. |
 | `GET /api/missions/{id}/proofs/{proofId}` | Télécharge un fichier : l'agent propriétaire (clé API, `missions:read`) une fois la mission livrée, le Payworker assigné, les admins. Les autres reçoivent `404`. |
 
@@ -161,6 +161,33 @@ pas retirés.
   contrôle d'accès.
 - `local` (défaut, développement) : répertoire `UPLOAD_DIR` (défaut `./uploads`). Avec
   Docker, montez-le en volume, sinon les fichiers sont perdus au redéploiement.
+
+**Analyse antivirus.** Chaque fichier est analysé par **ClamAV** (`clamd`) avant d'être
+stocké : il lui est transmis en mémoire (protocole `INSTREAM`), jamais écrit ailleurs.
+Un fichier où une menace est détectée est refusé (`422 FILE_INFECTED`, avec le nom de la
+signature), n'est pas conservé, et l'événement est journalisé (`proof.infected`).
+L'analyse est **obligatoire** : si ClamAV n'est pas configuré, est arrêté ou ne répond
+pas, l'envoi est refusé (`503 ANTIVIRUS_UNAVAILABLE`) plutôt qu'accepté sans contrôle.
+Chaque fichier porte son résultat (`scanStatus: CLEAN`, `scannedAt`).
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `CLAMAV_HOST` | — | Adresse de `clamd` (obligatoire, sauf `ANTIVIRUS=off`). |
+| `CLAMAV_PORT` | `3310` | Port TCP de `clamd`. |
+| `CLAMAV_TIMEOUT_MS` | `30000` | Délai maximal d'une analyse. |
+| `ANTIVIRUS` | — | `off` : fichiers stockés sans analyse, marqués `NOT_SCANNED` (développement uniquement). |
+
+En production, faites tourner ClamAV à côté de l'application, par exemple avec l'image
+officielle, qui met ses signatures à jour d'elle-même :
+
+```bash
+docker run -d --name clamav --restart unless-stopped -p 127.0.0.1:3310:3310 clamav/clamav:stable
+# puis CLAMAV_HOST=127.0.0.1 (ou le nom du service dans un réseau Docker)
+```
+
+`clamd` doit accepter des flux d'au moins `PROOF_MAX_FILE_MB` (`StreamMaxLength`, 25 Mo
+par défaut dans l'image officielle). Au premier démarrage, le téléchargement des
+signatures prend quelques minutes : les envois sont refusés en attendant.
 
 Limites réglables : `PROOF_MAX_FILE_MB` (10), `PROOF_MAX_FILES` (20). Les photos sont
 conservées telles quelles, métadonnées comprises (date, position GPS) : elles font

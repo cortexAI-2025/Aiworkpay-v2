@@ -208,6 +208,8 @@ export default async function MissionDetailPage({
                     📎 {att.filename}
                   </a>
                   {att.size && <span className="text-xs text-gray-400 ml-2">{(att.size / 1024).toFixed(0)} Ko</span>}
+                  {att.scanStatus === 'CLEAN' && <span className="text-xs text-green-700 ml-2">✓ analysé par l&apos;antivirus</span>}
+                  {att.scanStatus === 'NOT_SCANNED' && <span className="text-xs text-amber-700 ml-2">⚠ non analysé</span>}
                 </li>
               ))}
             </ul>

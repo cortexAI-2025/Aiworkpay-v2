@@ -29,6 +29,11 @@ enum MissionStatus {
   CANCELED
 }
 
+enum ScanStatus {
+  CLEAN // scanned by ClamAV, no threat found
+  NOT_SCANNED // stored while scanning was turned off (ANTIVIRUS=off)
+}
+
 enum AttachmentKind {
   BRIEF // provided with the mission
   PROOF // delivered by the Payworker as proof of work
@@ -229,6 +234,9 @@ model MissionAttachment {
   // access check); null for an external link
   storageKey   String?        @unique
   uploadedById String?
+  // Antivirus result for an uploaded file (null for an external link)
+  scanStatus   ScanStatus?
+  scannedAt    DateTime?
   createdAt    DateTime       @default(now())
 
   missionId String

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { apiError } from '@/lib/agentApi';
 import { hit } from '@/lib/rateLimit';
 import { proofUrl, publicAttachment } from '@/lib/missionView';
+import { AntivirusUnavailable, scanFile, type ScanResult } from '@/lib/antivirus';
 import { ACCEPTED_TYPES, detectType, getStorage, safeFilename, UPLOAD_LIMITS } from '@/lib/storage';
 
 /** Uploads per Payworker, whatever the mission: a brake on filling the storage. */
@@ -12,8 +13,9 @@ const UPLOADS_PER_HOUR = { max: 120, windowSeconds: 3600 };
 
 /**
  * The assigned Payworker uploads one proof file (multipart field `file`) while
- * the mission is in progress. Files are checked by content, stored privately,
- * and become part of the result when the mission is delivered.
+ * the mission is in progress. Files are checked by content, scanned by the
+ * antivirus, stored privately, and become part of the result when the mission
+ * is delivered.
  */
 export async function POST(
   request: NextRequest,
@@ -63,6 +65,27 @@ export async function POST(
       });
     }
 
+    // Nothing is stored before the antivirus has cleared it.
+    let scan: ScanResult;
+    try {
+      scan = await scanFile(content);
+    } catch (error) {
+      if (!(error instanceof AntivirusUnavailable)) throw error;
+      console.error('Antivirus unavailable, upload refused:', error.message);
+      return apiError('ANTIVIRUS_UNAVAILABLE', 'L’analyse antivirus est indisponible ; réessayez plus tard', 503);
+    }
+    if (scan.status === 'infected') {
+      console.warn(
+        JSON.stringify({ event: 'proof.infected', missionId: id, userId, signature: scan.signature, size: content.length })
+      );
+      return apiError(
+        'FILE_INFECTED',
+        'L’antivirus a détecté une menace dans ce fichier : il a été refusé',
+        422,
+        { signature: scan.signature }
+      );
+    }
+
     const attachmentId = randomUUID();
     const storageKey = `missions/${id}/${attachmentId}.${type.extension}`;
 
@@ -82,6 +105,8 @@ export async function POST(
           size: content.length,
           storageKey,
           uploadedById: userId,
+          scanStatus: scan.status === 'clean' ? 'CLEAN' : 'NOT_SCANNED',
+          scannedAt: scan.status === 'clean' ? new Date() : null,
         },
       });
     });

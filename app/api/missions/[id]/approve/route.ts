@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, authenticateAgent, findOwnedMission } from '@/lib/agentApi';
+import { prisma } from '@/lib/prisma';
 import { completeDeliveredMission } from '@/lib/missionLifecycle';
 
 /**
@@ -20,7 +21,11 @@ export async function POST(
 
     // Approving twice is not an error: the agent may be retrying.
     if (mission.status === 'COMPLETED') {
-      return NextResponse.json({ mission, alreadyApproved: true });
+      const payout = await prisma.transaction.findFirst({ where: { missionId: id, type: 'PAYWORKER_PAYOUT' } });
+      return NextResponse.json({ mission, alreadyApproved: true, commission: payout ? {
+        payworkerAmount: Number(payout.amount), platformFeeAmount: Number(mission.platformFeeAmount),
+        transferStatus: payout.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'PENDING',
+      } : undefined });
     }
     if (mission.status !== 'DELIVERED') {
       return apiError(

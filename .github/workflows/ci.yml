@@ -25,6 +25,12 @@ jobs:
       FACEBOOK_CLIENT_SECRET: placeholder
       APPLE_CLIENT_ID: placeholder
       APPLE_CLIENT_SECRET: placeholder
+      # Email / admin — not required for build, gracefully absent at runtime
+      RESEND_API_KEY: re_placeholder
+      EMAIL_FROM: noreply@aiworkpay.fr
+      CONTACT_EMAIL: contact@aiworkpay.fr
+      ADMIN_EMAILS: admin@aiworkpay.fr
+      ADMIN_SETUP_TOKEN: ci-admin-setup-token-placeholder
 
     steps:
       # ── Phase 1 — Checkout ────────────────────────────────────────────────

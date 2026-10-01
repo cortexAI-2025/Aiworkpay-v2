@@ -43,21 +43,12 @@ enum TransactionType {
   AGENT_PAYMENT
   PAYWORKER_PAYOUT
   PLATFORM_FEE
-  // legacy
-  SUBSCRIPTION
-  MISSION_PAYOUT
 }
 
 enum TransactionStatus {
   PENDING
   SUCCEEDED
   FAILED
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  INACTIVE
-  CANCELED
 }
 
 // ─── NextAuth models ─────────────────────────────────────────────────────────

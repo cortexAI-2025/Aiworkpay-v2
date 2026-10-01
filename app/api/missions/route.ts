@@ -334,7 +334,8 @@ export async function GET(request: NextRequest) {
       where.createdByApiKeyId = apiKey.id;
       if (status) where.status = status;
     } else if (session?.user.role === 'ADMIN') {
-      where.status = status ?? 'PUBLISHED';
+      // Admins see all statuses by default; filter only if explicitly requested
+      if (status) where.status = status;
     } else {
       // A Payworker sees the marketplace, and beyond it only its own missions:
       // results and proofs of other Payworkers' missions are not theirs to read.
@@ -343,7 +344,7 @@ export async function GET(request: NextRequest) {
     }
 
     const take = Math.min(Math.abs(parseInt(searchParams.get('limit') || '50')) || 50, 100);
-    const skip = Math.max(0, parseInt(searchParams.get('skip') || '0') || 0);
+    const skip = Math.min(Math.max(0, parseInt(searchParams.get('skip') || '0') || 0), 10_000);
 
     const missions = await prisma.mission.findMany({
       where,

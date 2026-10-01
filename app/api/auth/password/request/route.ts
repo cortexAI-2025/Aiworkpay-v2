@@ -19,6 +19,12 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Email invalide' }, { status: 400 });
 
   const email = parsed.data.email.trim().toLowerCase();
+
+  // Constant-time minimum delay — prevents account-existence timing oracle.
+  // The actual DB/email work is slower when the user exists; we pad the fast
+  // path so both branches take roughly the same wall-clock time.
+  const minDelay = new Promise<void>((r) => setTimeout(r, 400));
+
   const user = await prisma.user.findUnique({ where: { email } });
   if (user?.password) {
     const token = randomBytes(32).toString('hex');
@@ -42,5 +48,6 @@ export async function POST(request: NextRequest) {
       if (process.env.NODE_ENV !== 'production') console.info(`Password reset link: ${link}`);
     }
   }
+  await minDelay;
   return NextResponse.json({ message: 'Si ce compte existe, un email a été envoyé.' });
 }

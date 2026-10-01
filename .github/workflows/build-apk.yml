@@ -92,10 +92,14 @@ jobs:
       - name: Generate CI keystore & write keystore.properties
         working-directory: android
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'ci-store-pass' }}
-          KEY_ALIAS:         ${{ secrets.KEY_ALIAS         || 'aiworkpay'     }}
-          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD      || 'ci-key-pass'   }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS:         ${{ secrets.KEY_ALIAS || 'aiworkpay' }}
+          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
         run: |
+          if [[ -z "$KEYSTORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
+            echo "::error::KEYSTORE_PASSWORD and KEY_PASSWORD secrets must be set for release signing"
+            exit 1
+          fi
           keytool -genkeypair \
             -alias "$KEY_ALIAS" \
             -keyalg RSA \

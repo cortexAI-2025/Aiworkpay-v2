@@ -128,6 +128,17 @@ export async function retryMissionPayout(missionId: string): Promise<{ status: '
   if (payout.status === 'SUCCEEDED') return { status: 'SUCCEEDED' };
   if (!payout.user.stripeAccountId || !payout.user.stripeAccountOnboarded) return { status: 'PENDING', reason: 'CONNECT_NOT_READY' };
   try {
+    // Stripe may expire idempotency keys after 24 hours. Reconcile a successful
+    // transfer before retrying an old or uncertain outcome.
+    const previous = await stripe.transfers.list({ transfer_group: `mission_${missionId}`, limit: 100 });
+    const existing = previous.data.find(t => t.metadata.missionId === missionId);
+    if (existing) {
+      if (existing.reversed || existing.amount !== Math.round(Number(payout.amount) * 100) || existing.currency !== payout.currency.toLowerCase()) {
+        return { status: 'PENDING', reason: 'TRANSFER_RECONCILIATION_REQUIRED' };
+      }
+      await prisma.transaction.update({ where: { id: payout.id }, data: { status: 'SUCCEEDED', stripeTransferId: existing.id } });
+      return { status: 'SUCCEEDED' };
+    }
     const transfer = await stripe.transfers.create({
       amount: Math.round(Number(payout.amount) * 100),
       currency: payout.currency.toLowerCase(),

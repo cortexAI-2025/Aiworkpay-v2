@@ -9,12 +9,12 @@ function load(prisma, stripe) {
   vm.runInNewContext(code,{exports,console,require:(name)=> name==='./prisma'?{prisma}:name==='./stripe'?{stripe}:name==='./missionPayment'?{releaseMissionPayment:async()=> 'refunded'}:{} });
   return exports;
 }
-function fixture({fail=false,onboarded=true}={}) {
+function fixture({fail=false,onboarded=true,previous=[]}={}) {
   const mission={id:'m',status:'DELIVERED',assignedToUserId:'u',budget:'0.05',currency:'EUR'};
   const ledger=[];const calls=[];
   const tx={mission:{updateMany:async()=>{if(mission.status!=='DELIVERED')return{count:0};mission.status='COMPLETED';return{count:1};},findUniqueOrThrow:async()=>({...mission})},transaction:{create:async({data})=>{const t={id:'t'+ledger.length,...data};ledger.push(t);return t;}}};
   const prisma={$transaction:async(fn)=>fn(tx),transaction:{findFirst:async()=>{const t=ledger.find(t=>t.type==='PAYWORKER_PAYOUT');return t?{...t,user:{stripeAccountId:'acct_test',stripeAccountOnboarded:onboarded},mission}:null;},update:async({where,data})=>Object.assign(ledger.find(t=>t.id===where.id),data)}};
-  const stripe={transfers:{create:async(params,options)=>{calls.push({params,options});if(fail)throw Error('offline');return{id:'tr_test'};}}};
+  const stripe={transfers:{list:async()=>({data:previous}),create:async(params,options)=>{calls.push({params,options});if(fail)throw Error('offline');return{id:'tr_test'};}}};
   return{mission,ledger,calls,api:load(prisma,stripe)};
 }
 test('completion books an exact split and transfers once',async()=>{
@@ -37,4 +37,16 @@ test('unready Connect account keeps payout pending without contacting Stripe',as
 test('concurrent approvals claim only one completion',async()=>{
   const f=fixture();const results=await Promise.all([f.api.completeDeliveredMission({...f.mission}),f.api.completeDeliveredMission({...f.mission})]);
   assert.equal(results.filter(Boolean).length,1);assert.equal(f.ledger.length,2);assert.equal(f.calls.length,1);
+});
+
+test('reconciles an earlier transfer after the idempotency retention window',async()=>{
+  const f=fixture({previous:[{id:'tr_old',metadata:{missionId:'m'},amount:5,currency:'eur',reversed:false}]});
+  const done=await f.api.completeDeliveredMission({...f.mission});
+  assert.equal(done.commission.transferStatus,'SUCCEEDED');assert.equal(f.calls.length,0);
+  assert.equal(f.ledger.find(t=>t.type==='PAYWORKER_PAYOUT').stripeTransferId,'tr_old');
+});
+test('does not repay a reversed transfer automatically',async()=>{
+  const f=fixture({previous:[{id:'tr_old',metadata:{missionId:'m'},amount:5,currency:'eur',reversed:true}]});
+  const done=await f.api.completeDeliveredMission({...f.mission});
+  assert.equal(done.commission.transferStatus,'PENDING');assert.equal(f.calls.length,0);
 });

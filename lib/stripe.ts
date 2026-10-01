@@ -9,7 +9,7 @@ export function getStripe(): Stripe {
       throw new Error('STRIPE_SECRET_KEY is not set');
     }
     _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: '2026-08-26.dahlia',
       typescript: true,
     });
   }
@@ -22,3 +22,4 @@ export const stripe: Stripe = new Proxy({} as Stripe, {
     return (getStripe() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
+

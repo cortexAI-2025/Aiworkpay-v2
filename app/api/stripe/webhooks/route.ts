@@ -70,53 +70,58 @@ async function handleMissionPaymentSucceeded(pi: Stripe.PaymentIntent) {
   const missionId = pi.metadata?.missionId;
   if (!missionId) return;
 
-  // Atomic status transition — if another handler already processed this event
-  // (Stripe duplicate delivery), updateMany returns count=0 and we stop here.
-  const { count } = await prisma.mission.updateMany({
-    where: { id: missionId, status: 'PAYMENT_PENDING' },
-    data: { status: 'PUBLISHED', stripePaymentIntentId: pi.id },
-  });
-
-  // Handle payment arriving after a cancellation
-  if (count === 0) {
-    const mission = await prisma.mission.findUnique({ where: { id: missionId }, select: { status: true } });
-    if (mission?.status === 'CANCELED') {
-      await stripe.refunds.create(
-        { payment_intent: pi.id, reason: 'requested_by_customer' },
-        { idempotencyKey: `mission_refund_${missionId}` }
-      );
+  // Commit publication and its ledger entry together. A failed ledger write
+  // rolls back the claim so Stripe can safely retry the event.
+  const canceled = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.mission.updateMany({
+      where: { id: missionId, status: 'PAYMENT_PENDING' },
+      data: { status: 'PUBLISHED', stripePaymentIntentId: pi.id },
+    });
+    if (count === 0) {
+      const mission = await tx.mission.findUnique({
+        where: { id: missionId }, select: { status: true },
+      });
+      return mission?.status === 'CANCELED';
     }
-    return;
-  }
 
-  // Determine which user to associate with the AGENT_PAYMENT transaction.
-  const mission = await prisma.mission.findUnique({
-    where: { id: missionId },
-    select: { createdByUserId: true, createdByApiKeyId: true },
+    // Determine which user to associate with the AGENT_PAYMENT transaction.
+    const mission = await tx.mission.findUnique({
+      where: { id: missionId },
+      select: { createdByUserId: true, createdByApiKeyId: true },
+    });
+  
+    let userId = mission?.createdByUserId ?? null;
+    if (!userId && mission?.createdByApiKeyId) {
+      const apiKey = await tx.apiKey.findUnique({
+        where: { id: mission.createdByApiKeyId },
+        select: { createdByUserId: true },
+      });
+      userId = apiKey?.createdByUserId ?? null;
+    }
+  
+    if (userId) {
+      await tx.transaction.create({
+        data: {
+          missionId,
+          userId,
+          amount: pi.amount / 100,
+          currency: pi.currency.toUpperCase(),
+          type: 'AGENT_PAYMENT',
+          status: 'SUCCEEDED',
+          stripePaymentIntentId: pi.id,
+          stripeChargeId: typeof pi.latest_charge === 'string' ? pi.latest_charge : undefined,
+        },
+      });
+    }
+    return false;
   });
 
-  let userId = mission?.createdByUserId ?? null;
-  if (!userId && mission?.createdByApiKeyId) {
-    const apiKey = await prisma.apiKey.findUnique({
-      where: { id: mission.createdByApiKeyId },
-      select: { createdByUserId: true },
-    });
-    userId = apiKey?.createdByUserId ?? null;
-  }
-
-  if (userId) {
-    await prisma.transaction.create({
-      data: {
-        missionId,
-        userId,
-        amount: pi.amount / 100,
-        currency: pi.currency.toUpperCase(),
-        type: 'AGENT_PAYMENT',
-        status: 'SUCCEEDED',
-        stripePaymentIntentId: pi.id,
-        stripeChargeId: typeof pi.latest_charge === 'string' ? pi.latest_charge : undefined,
-      },
-    });
+  // External network calls must stay outside the database transaction.
+  if (canceled) {
+    await stripe.refunds.create(
+      { payment_intent: pi.id, reason: 'requested_by_customer' },
+      { idempotencyKey: `mission_refund_${missionId}` }
+    );
   }
 }
 
@@ -157,3 +162,4 @@ async function handleTransferCreated(transfer: Stripe.Transfer) {
     },
   });
 }
+

@@ -41,6 +41,38 @@ Un agent s'authentifie avec sa clé API : `Authorization: Bearer awp_…`. Une c
 l'identité de l'agent : il ne voit que les missions créées avec elle. Les erreurs ont
 la forme `{ "error": "message", "code": "CODE_STABLE" }`.
 
+### Clés API
+
+Un admin crée les clés dans **Compte**. La clé n'est affichée **qu'une seule fois** :
+la base n'en garde que l'empreinte SHA-256 et un préfixe (`awp_xxxxxxxx…`) pour la
+reconnaître. À la création, l'admin choisit :
+
+| Réglage | Effet |
+| --- | --- |
+| Permissions | `missions:read` (lire missions et résultats), `missions:write` (créer, annuler), `missions:approve` (valider — paie le Payworker — ou demander des corrections). Hors permission : `403 INSUFFICIENT_SCOPE`. |
+| Plafond par mission | Budget maximal d'une mission : `403 BUDGET_LIMIT_EXCEEDED`. |
+| Budget mensuel | Somme des budgets des missions du mois civil (UTC), hors missions annulées : `403 MONTHLY_BUDGET_EXCEEDED`. Vérifié atomiquement, même pour des créations simultanées. |
+| Expiration | Après la date : `403 INVALID_API_KEY`, comme une clé révoquée. |
+
+Les plafonds s'appliquent aux montants, quelle que soit leur devise : utilisez une
+seule devise par agent.
+
+Les clés créées avant la migration `20261001150000_api_key_security` sont hachées sur
+place et gardent toutes les permissions : les agents existants continuent de fonctionner.
+
+### Limites de débit
+
+| Limite | Défaut | Variable |
+| --- | --- | --- |
+| Requêtes par clé | 120 / minute | `RATE_LIMIT_AGENT_PER_MINUTE` |
+| Créations de missions par clé | 30 / heure | `RATE_LIMIT_CREATIONS_PER_HOUR` |
+| Échecs d'authentification par adresse IP | 20 / 10 minutes | `RATE_LIMIT_AUTH_FAILURES_PER_10_MIN` |
+
+Au-delà : `429 RATE_LIMITED` avec l'en-tête `Retry-After` (secondes). Les compteurs
+sont en base et valent pour toutes les instances. L'adresse IP est lue dans
+`X-Forwarded-For` (déploiement derrière un reverse proxy) ; si l'app est exposée
+directement, définissez `TRUST_PROXY=false`.
+
 ### Commander une mission
 
 ```bash

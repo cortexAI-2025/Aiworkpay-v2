@@ -137,10 +137,22 @@ model User {
 }
 
 model ApiKey {
-  id     String  @id @default(uuid())
-  key    String  @unique
-  label  String
-  active Boolean @default(true)
+  id        String  @id @default(uuid())
+  // SHA-256 of the key: the key itself is shown once at creation, never stored
+  keyHash   String  @unique
+  // First characters of the key (awp_xxxxxxxx), to recognise it in the dashboard
+  keyPrefix String
+  label     String
+  active    Boolean @default(true)
+
+  // What the key may do: missions:read, missions:write, missions:approve
+  scopes     String[]  @default(["missions:read", "missions:write", "missions:approve"])
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+
+  // Spending caps, in the missions' currency (null = no cap)
+  maxMissionBudget Decimal? @db.Decimal(10, 2)
+  monthlyBudget    Decimal? @db.Decimal(10, 2)
 
   // Stripe: each agent (API key) has a Stripe customer for billing
   stripeCustomerId String?
@@ -235,4 +247,13 @@ model Transaction {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Fixed-window counters shared by every instance of the app (rate limiting)
+model RateLimitBucket {
+  id        String   @id // "<bucket>:<window index>"
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }

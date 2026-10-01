@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { apiKey, response } = await authenticateAgent(request);
+    const { apiKey, response } = await authenticateAgent(request, 'missions:approve');
     if (response) return response;
 
     const { id } = await params;

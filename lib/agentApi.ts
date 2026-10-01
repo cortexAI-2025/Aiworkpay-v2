@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { ApiKey } from '@prisma/client';
-import { validateApiKey } from './apikey';
+import { hasScope, validateApiKey, type ApiKeyScope } from './apikey';
+import { clientIp, exhausted, hit, LIMITS } from './rateLimit';
 import { prisma } from './prisma';
 
 /**
@@ -20,18 +21,56 @@ export function extractApiKey(request: NextRequest): string | null {
  * Error body with a stable machine-readable `code` next to the human message,
  * so that an agent (or the MCP server) can branch on it.
  */
-export function apiError(code: string, error: string, status: number, details?: unknown) {
-  return NextResponse.json(details === undefined ? { error, code } : { error, code, details }, { status });
+export function apiError(
+  code: string,
+  error: string,
+  status: number,
+  details?: unknown,
+  headers?: Record<string, string>
+) {
+  return NextResponse.json(details === undefined ? { error, code } : { error, code, details }, { status, headers });
 }
 
+function rateLimited(retryAfter: number, message: string) {
+  return apiError('RATE_LIMITED', message, 429, { retryAfterSeconds: retryAfter }, { 'Retry-After': String(retryAfter) });
+}
+
+/**
+ * Authenticate an agent and check that its key may perform `scope`.
+ *
+ * Order matters: an address that failed too often is stopped before its key
+ * is even looked at, so that guessing keys stays impractical.
+ */
 export async function authenticateAgent(
-  request: NextRequest
+  request: NextRequest,
+  scope: ApiKeyScope
 ): Promise<{ apiKey: ApiKey; response?: never } | { apiKey?: never; response: NextResponse }> {
   const rawKey = extractApiKey(request);
   if (!rawKey) return { response: apiError('UNAUTHORIZED', 'Clé API manquante', 401) };
 
+  const failureBucket = `authfail:${clientIp(request)}`;
+  const blocked = await exhausted(failureBucket, LIMITS.authFailures);
+  if (!blocked.allowed) {
+    return { response: rateLimited(blocked.retryAfter, "Trop d'échecs d'authentification depuis cette adresse") };
+  }
+
   const apiKey = await validateApiKey(rawKey);
-  if (!apiKey) return { response: apiError('INVALID_API_KEY', 'Clé API invalide ou désactivée', 403) };
+  if (!apiKey) {
+    await hit(failureBucket, LIMITS.authFailures);
+    return { response: apiError('INVALID_API_KEY', 'Clé API invalide, expirée ou révoquée', 403) };
+  }
+
+  if (!hasScope(apiKey, scope)) {
+    return {
+      response: apiError('INSUFFICIENT_SCOPE', `Cette clé API n'a pas la permission « ${scope} »`, 403, {
+        requiredScope: scope,
+        keyScopes: apiKey.scopes,
+      }),
+    };
+  }
+
+  const usage = await hit(`key:${apiKey.id}:requests`, LIMITS.agentRequests);
+  if (!usage.allowed) return { response: rateLimited(usage.retryAfter, 'Trop de requêtes pour cette clé API') };
 
   return { apiKey };
 }

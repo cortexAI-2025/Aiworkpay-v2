@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { MissionStatus, Prisma, type ApiKey, type Mission } from '@prisma/client';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
-import { validateApiKey } from '@/lib/apikey';
 import { stripe } from '@/lib/stripe';
 import { auth } from '@/auth';
 import {
@@ -19,6 +18,7 @@ import {
   startPaymentIntent,
   type MissionPayment,
 } from '@/lib/missionPayment';
+import { hit, LIMITS } from '@/lib/rateLimit';
 
 const createMissionSchema = z
   .object({
@@ -47,7 +47,7 @@ type CreateMissionInput = z.infer<typeof createMissionSchema>;
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey, response } = await authenticateAgent(request);
+    const { apiKey, response } = await authenticateAgent(request, 'missions:write');
     if (response) return response;
 
     const idempotencyKey = readIdempotencyKey(request);
@@ -82,26 +82,51 @@ export async function POST(request: NextRequest) {
       if (existing) return await replay(existing, requestFingerprint, apiKey, input);
     }
 
+    // Spending caps of this key, then the creation rate
+    if (apiKey.maxMissionBudget !== null && toCents(input.budget) > toCents(apiKey.maxMissionBudget)) {
+      return apiError(
+        'BUDGET_LIMIT_EXCEEDED',
+        `Le budget dépasse le plafond par mission de cette clé API (${Number(apiKey.maxMissionBudget)})`,
+        403,
+        { maxMissionBudget: Number(apiKey.maxMissionBudget) }
+      );
+    }
+    const creations = await hit(`key:${apiKey.id}:creations`, LIMITS.missionCreations);
+    if (!creations.allowed) {
+      return apiError(
+        'RATE_LIMITED',
+        'Trop de missions créées avec cette clé API ; réessayez plus tard',
+        429,
+        { retryAfterSeconds: creations.retryAfter },
+        { 'Retry-After': String(creations.retryAfter) }
+      );
+    }
+
     const customerId = await ensureStripeCustomer(apiKey);
 
     // Create mission first
     let mission: Mission;
     try {
-      mission = await prisma.mission.create({
-        data: {
-          title: input.title,
-          description: input.description,
-          budget: input.budget,
-          currency: input.currency.toUpperCase(),
-          deadline: new Date(input.deadline),
-          priority: input.priority,
-          status: 'PAYMENT_PENDING',
-          createdByApiKeyId: apiKey.id,
-          idempotencyKey: idempotencyKey ?? null,
-          idempotencyFingerprint: idempotencyKey ? requestFingerprint : null,
-        },
+      mission = await createWithinMonthlyBudget(apiKey, input.budget, {
+        title: input.title,
+        description: input.description,
+        currency: input.currency.toUpperCase(),
+        deadline: new Date(input.deadline),
+        priority: input.priority,
+        status: 'PAYMENT_PENDING',
+        createdByApiKeyId: apiKey.id,
+        idempotencyKey: idempotencyKey ?? null,
+        idempotencyFingerprint: idempotencyKey ? requestFingerprint : null,
       });
     } catch (error) {
+      if (error instanceof MonthlyBudgetExceeded) {
+        return apiError(
+          'MONTHLY_BUDGET_EXCEEDED',
+          `Cette mission dépasserait le budget mensuel de cette clé API (${error.monthlyBudget}, déjà engagé : ${error.spent})`,
+          403,
+          { monthlyBudget: error.monthlyBudget, spentThisMonth: error.spent }
+        );
+      }
       // Two concurrent requests with the same Idempotency-Key: the other one won.
       if (idempotencyKey && isUniqueViolation(error)) {
         const existing = await prisma.mission.findUniqueOrThrow({
@@ -117,6 +142,50 @@ export async function POST(request: NextRequest) {
     console.error('Create mission error:', error);
     return apiError('INTERNAL_ERROR', 'Erreur interne du serveur', 500);
   }
+}
+
+function toCents(amount: number | Prisma.Decimal): number {
+  return Math.round(Number(amount) * 100);
+}
+
+class MonthlyBudgetExceeded extends Error {
+  constructor(
+    readonly monthlyBudget: number,
+    readonly spent: number
+  ) {
+    super('MONTHLY_BUDGET_EXCEEDED');
+  }
+}
+
+/**
+ * Create the mission, checking the key's monthly budget in the same
+ * transaction: an advisory lock per key serialises concurrent creations, so
+ * that two requests cannot both fit under the cap and exceed it together.
+ * Every mission of the calendar month (UTC) counts, except canceled ones.
+ */
+async function createWithinMonthlyBudget(
+  apiKey: ApiKey,
+  budget: number,
+  data: Omit<Prisma.MissionUncheckedCreateInput, 'budget'>
+): Promise<Mission> {
+  if (apiKey.monthlyBudget === null) return prisma.mission.create({ data: { ...data, budget } });
+
+  const monthlyBudget = apiKey.monthlyBudget;
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${apiKey.id}))::text`;
+
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const { _sum } = await tx.mission.aggregate({
+      _sum: { budget: true },
+      where: { createdByApiKeyId: apiKey.id, status: { not: 'CANCELED' }, createdAt: { gte: monthStart } },
+    });
+    const spent = toCents(_sum.budget ?? 0);
+    if (spent + toCents(budget) > toCents(monthlyBudget)) {
+      throw new MonthlyBudgetExceeded(Number(monthlyBudget), spent / 100);
+    }
+    return tx.mission.create({ data: { ...data, budget } });
+  });
 }
 
 async function ensureStripeCustomer(apiKey: ApiKey): Promise<string> {
@@ -259,10 +328,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (rawKey) {
-      const apiKey = await validateApiKey(rawKey);
-      if (!apiKey) {
-        return apiError('INVALID_API_KEY', 'Clé API invalide', 403);
-      }
+      const { apiKey, response } = await authenticateAgent(request, 'missions:read');
+      if (response) return response;
       where.createdByApiKeyId = apiKey.id;
       if (status) where.status = status;
     } else if (session?.user.role === 'ADMIN') {

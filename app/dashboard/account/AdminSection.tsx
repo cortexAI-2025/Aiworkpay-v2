@@ -4,18 +4,38 @@ import { useState, useEffect } from 'react';
 
 interface ApiKey {
   id: string;
-  key: string;
   label: string;
+  keyPrefix: string;
   active: boolean;
+  scopes: string[];
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  maxMissionBudget: string | null;
+  monthlyBudget: string | null;
   createdAt: string;
 }
+
+const SCOPES: { id: string; label: string }[] = [
+  { id: 'missions:read', label: 'Lire ses missions et résultats' },
+  { id: 'missions:write', label: 'Créer et annuler des missions' },
+  { id: 'missions:approve', label: 'Valider (paie le Payworker) ou demander des corrections' },
+];
+
+const optionalNumber = (value: string) => (value.trim() === '' ? undefined : Number(value));
+const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString('fr-FR') : null);
 
 export default function AdminSection() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [label, setLabel] = useState('');
+  const [scopes, setScopes] = useState<string[]>(SCOPES.map((s) => s.id));
+  const [expiresInDays, setExpiresInDays] = useState('');
+  const [maxMissionBudget, setMaxMissionBudget] = useState('');
+  const [monthlyBudget, setMonthlyBudget] = useState('');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [newKey, setNewKey] = useState<{ label: string; key: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchKeys = async () => {
     setLoading(true);
@@ -31,17 +51,35 @@ export default function AdminSection() {
     fetchKeys();
   }, []);
 
+  const toggleScope = (id: string) =>
+    setScopes((current) => (current.includes(id) ? current.filter((s) => s !== id) : [...current, id]));
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setError('');
     const res = await fetch('/api/apikeys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label }),
+      body: JSON.stringify({
+        label,
+        scopes,
+        expiresInDays: optionalNumber(expiresInDays),
+        maxMissionBudget: optionalNumber(maxMissionBudget),
+        monthlyBudget: optionalNumber(monthlyBudget),
+      }),
     });
+    const data = await res.json();
     if (res.ok) {
+      setNewKey({ label: data.label, key: data.key });
+      setCopied(false);
       setLabel('');
+      setExpiresInDays('');
+      setMaxMissionBudget('');
+      setMonthlyBudget('');
       fetchKeys();
+    } else {
+      setError(data.error || 'Création impossible');
     }
     setCreating(false);
   };
@@ -51,10 +89,10 @@ export default function AdminSection() {
     fetchKeys();
   };
 
-  const copyToClipboard = (key: string, id: string) => {
-    navigator.clipboard.writeText(key);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const copyNewKey = () => {
+    if (!newKey) return;
+    navigator.clipboard.writeText(newKey.key);
+    setCopied(true);
   };
 
   return (
@@ -64,19 +102,60 @@ export default function AdminSection() {
         Gestion des clés API
       </h2>
 
-      <form onSubmit={handleCreate} className="flex gap-3 mb-6">
+      <form onSubmit={handleCreate} className="space-y-3 mb-6">
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="Nom de l'agent (ex: Agent GPT-4)"
-          className="input flex-1"
+          className="input w-full"
           required
         />
-        <button type="submit" disabled={creating} className="btn-primary whitespace-nowrap">
-          {creating ? '...' : '+ Créer'}
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium text-gray-700 mb-1">Permissions</legend>
+          {SCOPES.map((scope) => (
+            <label key={scope.id} className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={scopes.includes(scope.id)} onChange={() => toggleScope(scope.id)} />
+              <span className="font-mono text-xs">{scope.id}</span> — {scope.label}
+            </label>
+          ))}
+        </fieldset>
+        <div className="grid md:grid-cols-3 gap-3">
+          <label className="text-sm text-gray-700">
+            Plafond par mission
+            <input type="number" min="0.01" step="0.01" value={maxMissionBudget} onChange={(e) => setMaxMissionBudget(e.target.value)} className="input mt-1" placeholder="Aucun" />
+          </label>
+          <label className="text-sm text-gray-700">
+            Budget mensuel
+            <input type="number" min="0.01" step="0.01" value={monthlyBudget} onChange={(e) => setMonthlyBudget(e.target.value)} className="input mt-1" placeholder="Aucun" />
+          </label>
+          <label className="text-sm text-gray-700">
+            Expire dans (jours)
+            <input type="number" min="1" step="1" value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)} className="input mt-1" placeholder="Jamais" />
+          </label>
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button type="submit" disabled={creating || scopes.length === 0} className="btn-primary whitespace-nowrap disabled:opacity-50">
+          {creating ? '...' : '+ Créer la clé'}
         </button>
       </form>
+
+      {newKey && (
+        <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-300">
+          <p className="text-sm font-medium text-amber-900 mb-2">
+            Clé de « {newKey.label} » : copiez-la maintenant, elle ne sera plus jamais affichée.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 font-mono text-xs break-all bg-white p-2 rounded border border-amber-200">{newKey.key}</code>
+            <button type="button" onClick={copyNewKey} className="text-xs text-brand font-medium whitespace-nowrap">
+              {copied ? '✓ Copié' : 'Copier'}
+            </button>
+            <button type="button" onClick={() => setNewKey(null)} className="text-xs text-gray-500 whitespace-nowrap">
+              Masquer
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-500 text-sm">Chargement...</p>
@@ -84,33 +163,37 @@ export default function AdminSection() {
         <p className="text-gray-500 text-sm text-center py-4">Aucune clé API créée.</p>
       ) : (
         <div className="space-y-3">
-          {keys.map((k) => (
-            <div key={k.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
-              <div className="flex-1 min-w-0 mr-3">
-                <div className="font-medium text-sm text-gray-900">{k.label}</div>
-                <div className="font-mono text-xs text-gray-500 truncate">{k.key}</div>
+          {keys.map((k) => {
+            const expired = k.expiresAt !== null && new Date(k.expiresAt) <= new Date();
+            return (
+              <div key={k.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
+                <div className="flex-1 min-w-0 mr-3">
+                  <div className="font-medium text-sm text-gray-900">{k.label}</div>
+                  <div className="font-mono text-xs text-gray-500 truncate">{k.keyPrefix}…</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {k.scopes.join(', ')}
+                    {k.maxMissionBudget && ` · max ${Number(k.maxMissionBudget)} / mission`}
+                    {k.monthlyBudget && ` · ${Number(k.monthlyBudget)} / mois`}
+                    {k.expiresAt && ` · expire le ${formatDate(k.expiresAt)}`}
+                    {` · ${k.lastUsedAt ? `utilisée le ${formatDate(k.lastUsedAt)}` : 'jamais utilisée'}`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`status-badge ${k.active && !expired ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {!k.active ? 'Révoquée' : expired ? 'Expirée' : 'Active'}
+                  </span>
+                  {k.active && (
+                    <button
+                      onClick={() => handleRevoke(k.id)}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium"
+                    >
+                      Révoquer
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`status-badge ${k.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {k.active ? 'Active' : 'Révoquée'}
-                </span>
-                <button
-                  onClick={() => copyToClipboard(k.key, k.id)}
-                  className="text-xs text-brand hover:text-brand-dark font-medium"
-                >
-                  {copiedId === k.id ? '✓ Copié' : 'Copier'}
-                </button>
-                {k.active && (
-                  <button
-                    onClick={() => handleRevoke(k.id)}
-                    className="text-xs text-red-600 hover:text-red-700 font-medium"
-                  >
-                    Révoquer
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

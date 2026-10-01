@@ -5,12 +5,15 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.webkit.WebSettingsCompat
@@ -21,6 +24,28 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val appUrl = BuildConfig.APP_URL
+
+    // <input type="file"> in the WebView (proof photos and PDFs): the page waits
+    // on this callback until the system picker returns, or is cancelled.
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+
+    private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val uris: Array<Uri>? = if (result.resultCode == RESULT_OK && data != null) {
+            val clip = data.clipData
+            when {
+                clip != null -> Array(clip.itemCount) { index -> clip.getItemAt(index).uri }
+                data.data != null -> arrayOf(data.data!!)
+                else -> null
+            }
+        } else {
+            null
+        }
+        // Always answer, even with null on cancel: otherwise the page never
+        // lets the user pick a file again
+        fileCallback?.onReceiveValue(uris)
+        fileCallback = null
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +70,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupWebView() {
         binding.webview.apply {
             webViewClient = AiworkpayWebViewClient()
+            webChromeClient = AiworkpayChromeClient()
 
             settings.apply {
                 javaScriptEnabled = true
@@ -89,6 +115,36 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         binding.webview.saveState(outState)
+    }
+
+    inner class AiworkpayChromeClient : WebChromeClient() {
+
+        override fun onShowFileChooser(
+            webView: WebView?,
+            filePathCallback: ValueCallback<Array<Uri>>?,
+            fileChooserParams: FileChooserParams?
+        ): Boolean {
+            // A picker still open from a previous request is answered first
+            fileCallback?.onReceiveValue(null)
+            fileCallback = filePathCallback
+
+            // Honours the input's `accept` (images, PDF) and `multiple` attributes
+            val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }
+            if (fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+
+            return try {
+                filePicker.launch(intent)
+                true
+            } catch (e: android.content.ActivityNotFoundException) {
+                fileCallback = null
+                false
+            }
+        }
     }
 
     inner class AiworkpayWebViewClient : WebViewClient() {

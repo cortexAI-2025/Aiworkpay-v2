@@ -60,6 +60,10 @@ export default async function MissionDetailPage({
   const deadlineDate = new Date(mission.deadline);
   const isOverdue = deadlineDate < new Date() && !['COMPLETED', 'CANCELED'].includes(mission.status);
 
+  const briefAttachments = mission.attachments.filter((att) => att.kind === 'BRIEF');
+  const proofAttachments = mission.attachments.filter((att) => att.kind === 'PROOF');
+  const canSeeResult = isAssignedToMe || session.user.role === 'ADMIN';
+
   // Show 90/10 breakdown to assignee
   const showCommission = isAssignedToMe && Number(mission.budget) > 0;
   const payworkerEarning = showCommission
@@ -133,11 +137,11 @@ export default async function MissionDetailPage({
       </div>
 
       {/* Attachments */}
-      {mission.attachments.length > 0 && (
+      {briefAttachments.length > 0 && (
         <div className="card">
           <h2 className="font-semibold text-gray-900 mb-3">Pièces jointes</h2>
           <div className="space-y-2">
-            {mission.attachments.map((att) => (
+            {briefAttachments.map((att) => (
               <a
                 key={att.id}
                 href={att.url}
@@ -151,6 +155,35 @@ export default async function MissionDetailPage({
               </a>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Delivered result */}
+      {canSeeResult && mission.resultNote && (
+        <div className="card">
+          <h2 className="font-semibold text-gray-900 mb-1">Résultat livré</h2>
+          {mission.deliveredAt && (
+            <p className="text-xs text-gray-500 mb-3">
+              {new Date(mission.deliveredAt).toLocaleString('fr-FR')}
+            </p>
+          )}
+          <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">{mission.resultNote}</div>
+          {mission.resultData !== null && (
+            <pre className="mt-3 p-3 rounded-lg bg-gray-50 text-xs overflow-x-auto">
+              {JSON.stringify(mission.resultData, null, 2)}
+            </pre>
+          )}
+          {proofAttachments.length > 0 && (
+            <ul className="mt-3 space-y-1">
+              {proofAttachments.map((att) => (
+                <li key={att.id}>
+                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-sm text-brand underline break-all">
+                    📎 {att.filename}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

@@ -39,6 +39,13 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      // ── Checkout page left unpaid until it expired ────────────────────────
+      case 'checkout.session.expired': {
+        const checkoutSession = event.data.object as Stripe.Checkout.Session;
+        await handleCheckoutExpired(checkoutSession);
+        break;
+      }
+
       // ── Connect: payout to Payworker confirmed ────────────────────────────
       case 'transfer.created': {
         const transfer = event.data.object as Stripe.Transfer;
@@ -66,10 +73,11 @@ async function handleMissionPaymentSucceeded(pi: Stripe.PaymentIntent) {
   const mission = await prisma.mission.findUnique({ where: { id: missionId } });
   if (!mission || mission.status !== 'PAYMENT_PENDING') return;
 
-  // Publish the mission — payment confirmed
+  // Publish the mission — payment confirmed. A mission paid through Checkout
+  // learns its PaymentIntent only now; it is needed to refund a cancelation.
   await prisma.mission.update({
     where: { id: missionId },
-    data: { status: 'PUBLISHED' },
+    data: { status: 'PUBLISHED', stripePaymentIntentId: pi.id },
   });
 
   // Determine which user to associate with the AGENT_PAYMENT transaction.
@@ -104,8 +112,18 @@ async function handleMissionPaymentFailed(pi: Stripe.PaymentIntent) {
   const missionId = pi.metadata?.missionId;
   if (!missionId) return;
 
-  await prisma.mission.update({
-    where: { id: missionId },
+  // On a Checkout page the payer can try another card: the page stays open
+  // until it expires (checkout.session.expired).
+  await prisma.mission.updateMany({
+    where: { id: missionId, status: 'PAYMENT_PENDING', stripeCheckoutSessionId: null },
+    data: { status: 'CANCELED' },
+  });
+}
+
+async function handleCheckoutExpired(checkoutSession: Stripe.Checkout.Session) {
+  // Only a mission still waiting for this very page is canceled.
+  await prisma.mission.updateMany({
+    where: { stripeCheckoutSessionId: checkoutSession.id, status: 'PAYMENT_PENDING' },
     data: { status: 'CANCELED' },
   });
 }

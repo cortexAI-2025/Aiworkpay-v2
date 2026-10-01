@@ -35,6 +35,33 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
     finally { setLoading(false); }
   };
 
+  const [resultNote, setResultNote] = useState('');
+  const [proofLinks, setProofLinks] = useState('');
+
+  const handleDeliver = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+    // One https link per line, e.g. photos hosted on a shared drive
+    const attachments = proofLinks
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((url) => ({ url, filename: url.split('/').pop()?.split('?')[0] || url }));
+    try {
+      const res = await fetch(`/api/missions/${mission.id}/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: resultNote, attachments }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Erreur lors de la livraison'); return; }
+      setSuccess('Mission livrée !');
+      router.refresh();
+    } catch { setError('Erreur réseau'); }
+    finally { setLoading(false); }
+  };
+
   const handleStatusChange = async (newStatus: string) => {
     setLoading(true);
     setError('');
@@ -84,9 +111,33 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
       )}
 
       {isAssignedToMe && mission.status === 'IN_PROGRESS' && (
-        <button onClick={() => handleStatusChange('DELIVERED')} disabled={loading} className="btn-primary w-full">
-          {loading ? 'Chargement...' : '📦 Marquer comme livrée'}
-        </button>
+        <form onSubmit={handleDeliver} className="space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Résultat</span>
+            <textarea
+              value={resultNote}
+              onChange={(e) => setResultNote(e.target.value)}
+              required
+              maxLength={20000}
+              rows={6}
+              className="input mt-1"
+              placeholder="Ce qui a été fait, constaté, avec la date et l'heure."
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Preuves (liens https, un par ligne)</span>
+            <textarea
+              value={proofLinks}
+              onChange={(e) => setProofLinks(e.target.value)}
+              rows={3}
+              className="input mt-1"
+              placeholder="https://..."
+            />
+          </label>
+          <button type="submit" disabled={loading || !resultNote.trim()} className="btn-primary w-full disabled:opacity-50">
+            {loading ? 'Envoi...' : '📦 Livrer la mission'}
+          </button>
+        </form>
       )}
 
       {mission.status === 'DELIVERED' && (

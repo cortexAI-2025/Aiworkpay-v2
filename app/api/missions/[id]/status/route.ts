@@ -3,14 +3,17 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { stripe } from '@/lib/stripe';
+import { releaseMissionPayment } from '@/lib/missionPayment';
 
 const statusSchema = z.object({
   status: z.enum(['IN_PROGRESS', 'DELIVERED', 'COMPLETED', 'CANCELED']),
 });
 
+// IN_PROGRESS → DELIVERED goes through POST /api/missions/{id}/deliver, which
+// records the result the agent is waiting for.
 const allowedPayworkerTransitions: Record<string, string[]> = {
   ASSIGNED: ['IN_PROGRESS'],
-  IN_PROGRESS: ['DELIVERED'],
+  IN_PROGRESS: [],
   DELIVERED: [],
   COMPLETED: [],
   CANCELED: [],
@@ -60,6 +63,12 @@ export async function PATCH(
     }
 
     const allowed = (isAdmin ? allowedAdminTransitions : allowedPayworkerTransitions)[mission.status] ?? [];
+    if (!isAdmin && mission.status === 'IN_PROGRESS' && newStatus === 'DELIVERED') {
+      return NextResponse.json(
+        { error: 'Livrez la mission avec son résultat via POST /api/missions/{id}/deliver' },
+        { status: 409 }
+      );
+    }
     if (!allowed.includes(newStatus)) {
         return NextResponse.json(
           { error: `Transition "${mission.status}" → "${newStatus}" non autorisée` },
@@ -157,19 +166,9 @@ export async function PATCH(
     }
 
     // ── Cancelation: refund agent if mission not yet assigned ─────────────────
-    if (newStatus === 'CANCELED' && mission.stripePaymentIntentId) {
+    if (newStatus === 'CANCELED' && (mission.stripePaymentIntentId || mission.stripeCheckoutSessionId)) {
       try {
-        const paymentIntent = await stripe.paymentIntents.retrieve(mission.stripePaymentIntentId);
-        if (paymentIntent.status === 'succeeded') {
-          await stripe.refunds.create({
-            payment_intent: mission.stripePaymentIntentId,
-            reason: 'requested_by_customer',
-          }, { idempotencyKey: `mission_refund_${id}` });
-        } else if (!['canceled', 'requires_payment_method'].includes(paymentIntent.status)) {
-          await stripe.paymentIntents.cancel(mission.stripePaymentIntentId, {}, {
-            idempotencyKey: `mission_cancel_${id}`,
-          });
-        }
+        await releaseMissionPayment(mission);
       } catch (refundErr) {
         console.error('Refund failed:', refundErr);
         return NextResponse.json(

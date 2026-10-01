@@ -26,9 +26,8 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((v) => v.trim().toLowerCase());
     await prisma.user.create({
-      data: { email, password: hashedPassword, role: adminEmails.includes(email) ? 'ADMIN' : 'PAYWORKER' },
+      data: { email, password: hashedPassword, role: 'PAYWORKER' },
     });
 
     // Session is created by the caller via signIn('credentials') after this

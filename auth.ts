@@ -74,11 +74,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async createUser({ user }) {
       if (user.id) {
-        const email = user.email?.toLowerCase();
-        const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((v) => v.trim().toLowerCase());
         await prisma.user.update({
           where: { id: user.id },
-          data: { role: email && adminEmails.includes(email) ? 'ADMIN' : 'PAYWORKER' },
+          data: { role: 'PAYWORKER' },
         });
       }
     },

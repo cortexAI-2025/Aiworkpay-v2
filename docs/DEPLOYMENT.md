@@ -6,7 +6,8 @@ Docker startup applies `prisma migrate deploy` before starting Next.js.
 Required application variables:
 - `DATABASE_URL`: persistent PostgreSQL database.
 - `AUTH_SECRET`: random secret; `AUTH_URL` and `NEXT_PUBLIC_APP_URL`: deployed HTTPS origin.
-- `ADMIN_EMAILS`: administrator email(s), used at signup.
+- `ADMIN_EMAILS`: administrator email(s) allowed to activate access.
+- `ADMIN_SETUP_TOKEN`: random activation code, entered in My Account after signup; remove it after activation. Public signup never grants admin based on email alone.
 - `STRIPE_SECRET_KEY`: restricted test key for acceptance, with required Connect permissions.
 - `STRIPE_WEBHOOK_SECRET`: signing secret of this application's webhook endpoint.
 - `CLAMAV_HOST`: private address of a running clamd service (port 3310).

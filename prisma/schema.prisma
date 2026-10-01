@@ -180,6 +180,10 @@ model Mission {
   resultData  Json?
   deliveredAt DateTime?
 
+  // Changes requested by the agent on a delivery (DELIVERED → IN_PROGRESS)
+  revisionFeedback String?
+  revisionCount    Int     @default(0)
+
   // Commission stored at time of completion
   platformFeeAmount Decimal? @db.Decimal(10, 2) // 10 %
   payworkerAmount   Decimal? @db.Decimal(10, 2) // 90 %

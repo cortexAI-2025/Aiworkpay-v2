@@ -158,6 +158,15 @@ export default async function MissionDetailPage({
         </div>
       )}
 
+      {/* Changes requested by the agent */}
+      {isAssignedToMe && mission.status === 'IN_PROGRESS' && mission.revisionFeedback && (
+        <div className="card border-amber-300 bg-amber-50">
+          <h2 className="font-semibold text-amber-900 mb-2">Corrections demandées par l&apos;agent</h2>
+          <div className="text-amber-900 whitespace-pre-wrap text-sm leading-relaxed">{mission.revisionFeedback}</div>
+          <p className="text-xs text-amber-700 mt-2">Livrez à nouveau la mission ci-dessous ; vos nouvelles preuves remplacent les précédentes.</p>
+        </div>
+      )}
+
       {/* Delivered result */}
       {canSeeResult && mission.resultNote && (
         <div className="card">

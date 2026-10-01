@@ -265,8 +265,13 @@ export async function GET(request: NextRequest) {
       }
       where.createdByApiKeyId = apiKey.id;
       if (status) where.status = status;
-    } else {
+    } else if (session?.user.role === 'ADMIN') {
       where.status = status ?? 'PUBLISHED';
+    } else {
+      // A Payworker sees the marketplace, and beyond it only its own missions:
+      // results and proofs of other Payworkers' missions are not theirs to read.
+      where.status = status ?? 'PUBLISHED';
+      if (where.status !== 'PUBLISHED') where.assignedToUserId = session?.user.id;
     }
 
     const take = Math.min(Math.abs(parseInt(searchParams.get('limit') || '50')) || 50, 100);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { apiError } from '@/lib/agentApi';
@@ -80,12 +80,15 @@ export async function POST(
         data: {
           status: 'DELIVERED',
           resultNote: note,
-          resultData: data === undefined ? undefined : (data as Prisma.InputJsonObject),
+          // Reset on a new delivery: a previous round's data must not linger
+          resultData: data === undefined ? Prisma.DbNull : (data as Prisma.InputJsonObject),
           deliveredAt: new Date(),
         },
       });
       if (claimed.count !== 1) return null;
 
+      // A new delivery after requested changes replaces the previous proofs
+      await tx.missionAttachment.deleteMany({ where: { missionId: id, kind: 'PROOF' } });
       if (attachments.length > 0) {
         await tx.missionAttachment.createMany({
           data: attachments.map((attachment) => ({ ...attachment, missionId: id, kind: 'PROOF' as const })),

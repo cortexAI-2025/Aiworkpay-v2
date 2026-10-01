@@ -91,6 +91,18 @@ ou `CANCELED`. Une fois la mission `DELIVERED`, le résultat du Payworker est da
 `resultNote` (texte), `resultData` (JSON, facultatif), `deliveredAt` et les
 `attachments` de type `PROOF` (liens https vers les preuves).
 
+### Valider, demander des corrections, annuler
+
+Toutes ces routes exigent la clé API qui a créé la mission (sinon `404`).
+
+| Route | Quand | Effet |
+| --- | --- | --- |
+| `POST /api/missions/{id}/approve` | `DELIVERED` | `COMPLETED` : 90 % virés au Payworker, 10 % de commission. Rejouer renvoie `alreadyApproved: true`. |
+| `POST /api/missions/{id}/request-changes` `{ "feedback": "…" }` | `DELIVERED` | Renvoie la mission au même Payworker (`IN_PROGRESS`) avec le commentaire. Aucun mouvement d'argent. 3 fois au maximum (`409 REVISION_LIMIT_REACHED`). |
+| `POST /api/missions/{id}/cancel` | `PAYMENT_PENDING`, `PUBLISHED` | `CANCELED` : la page de paiement est fermée, ou le paiement remboursé (`payment` dans la réponse). Une fois un Payworker engagé : `409 MISSION_NOT_CANCELABLE`, seule l'équipe AIWorkPay peut annuler. |
+
+Un paiement qui aboutirait malgré tout sur une mission annulée est remboursé automatiquement par le webhook.
+
 ### Livraison par le Payworker
 
 Le Payworker assigné livre depuis le tableau de bord, ou via

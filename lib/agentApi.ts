@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { ApiKey } from '@prisma/client';
 import { validateApiKey } from './apikey';
+import { prisma } from './prisma';
 
 /**
  * Helpers shared by the routes an agent calls with its API key
@@ -63,4 +64,22 @@ function canonicalJson(value: unknown): string {
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+// ─── Missions owned by the calling agent ─────────────────────────────────────
+
+/** The mission if it was created with this API key, otherwise null (answer 404). */
+export function findOwnedMission(apiKey: Pick<ApiKey, 'id'>, missionId: string) {
+  return prisma.mission.findFirst({ where: { id: missionId, createdByApiKeyId: apiKey.id } });
+}
+
+/** Optional JSON body: an empty body is accepted, malformed JSON is not. */
+export async function readOptionalJson(request: NextRequest): Promise<{ ok: true; body: unknown } | { ok: false }> {
+  const text = await request.text();
+  if (!text.trim()) return { ok: true, body: {} };
+  try {
+    return { ok: true, body: JSON.parse(text) };
+  } catch {
+    return { ok: false };
+  }
 }

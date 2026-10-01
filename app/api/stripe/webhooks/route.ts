@@ -71,7 +71,18 @@ async function handleMissionPaymentSucceeded(pi: Stripe.PaymentIntent) {
   if (!missionId) return;
 
   const mission = await prisma.mission.findUnique({ where: { id: missionId } });
-  if (!mission || mission.status !== 'PAYMENT_PENDING') return;
+  if (!mission) return;
+
+  // Paid after the mission was canceled (agent or admin cancel racing the
+  // payment, expired page): nobody will do the work, give the money back.
+  if (mission.status === 'CANCELED') {
+    await stripe.refunds.create(
+      { payment_intent: pi.id, reason: 'requested_by_customer' },
+      { idempotencyKey: `mission_refund_${missionId}` }
+    );
+    return;
+  }
+  if (mission.status !== 'PAYMENT_PENDING') return;
 
   // Publish the mission — payment confirmed. A mission paid through Checkout
   // learns its PaymentIntent only now; it is needed to refund a cancelation.

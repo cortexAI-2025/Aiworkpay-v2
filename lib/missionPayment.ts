@@ -137,6 +137,9 @@ export async function describePayment(
   return null;
 }
 
+/** What releasing a mission's payment did. */
+export type PaymentRelease = 'checkout_closed' | 'refunded' | 'payment_canceled' | 'nothing_to_release';
+
 /**
  * Undo whatever the agent paid, or close the payment still open, before a
  * mission is canceled. Throws if Stripe refuses: the caller must then keep the
@@ -144,7 +147,7 @@ export async function describePayment(
  */
 export async function releaseMissionPayment(
   mission: Pick<Mission, 'id' | 'stripePaymentIntentId' | 'stripeCheckoutSessionId'>
-): Promise<void> {
+): Promise<PaymentRelease> {
   let paymentIntentId = mission.stripePaymentIntentId;
 
   if (!paymentIntentId && mission.stripeCheckoutSessionId) {
@@ -154,13 +157,13 @@ export async function releaseMissionPayment(
       await stripe.checkout.sessions.expire(mission.stripeCheckoutSessionId, {}, {
         idempotencyKey: `mission_checkout_expire_${mission.id}`,
       });
-      return;
+      return 'checkout_closed';
     }
     paymentIntentId =
       typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id ?? null;
   }
 
-  if (!paymentIntentId) return;
+  if (!paymentIntentId) return 'nothing_to_release';
 
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
   if (paymentIntent.status === 'succeeded') {
@@ -168,9 +171,13 @@ export async function releaseMissionPayment(
       { payment_intent: paymentIntentId, reason: 'requested_by_customer' },
       { idempotencyKey: `mission_refund_${mission.id}` }
     );
-  } else if (!['canceled', 'requires_payment_method'].includes(paymentIntent.status)) {
+    return 'refunded';
+  }
+  if (!['canceled', 'requires_payment_method'].includes(paymentIntent.status)) {
     await stripe.paymentIntents.cancel(paymentIntentId, {}, {
       idempotencyKey: `mission_cancel_${mission.id}`,
     });
+    return 'payment_canceled';
   }
+  return 'nothing_to_release';
 }

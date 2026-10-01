@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import ConnectPayoutButton from './ConnectPayoutButton';
+import ActivateAdmin from './ActivateAdmin';
 import AdminSection from './AdminSection';
 
 export default async function AccountPage() {
@@ -87,6 +88,8 @@ export default async function AccountPage() {
 
         <ConnectPayoutButton isOnboarded={isOnboarded} hasAccount={!!user.stripeAccountId} />
       </div>
+
+      {user.role !== 'ADMIN' && (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).includes(user.email?.toLowerCase() || '') && <ActivateAdmin />}
 
       {/* Admin */}
       {session.user.role === 'ADMIN' && <AdminSection />}

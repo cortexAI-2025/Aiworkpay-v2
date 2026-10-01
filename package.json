@@ -10,10 +10,12 @@
     "check": "npm run lint && tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test": "node --test test/*.cjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
+    "@aws-sdk/client-s3": "^3.1144.0",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "next": "^15.5.26",

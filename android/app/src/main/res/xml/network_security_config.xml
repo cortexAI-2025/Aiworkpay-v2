@@ -2,7 +2,7 @@
 <network-security-config>
     <!-- Production domain: HTTPS only -->
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">aiworkpay.com</domain>
+        <domain includeSubdomains="true">aiworkpay.fr</domain>
     </domain-config>
     <!-- Local dev: allow cleartext for localhost -->
     <domain-config cleartextTrafficPermitted="true">

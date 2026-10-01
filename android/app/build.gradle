@@ -18,11 +18,14 @@ android {
         applicationId "com.aiworkpay.app"
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 3
+        versionName "1.0.2"
 
-        // Production URL loaded by the WebView
-        buildConfigField "String", "APP_URL", "\"https://aiworkpay.fr\""
+        // URL of the AIWorkPay web application loaded by the WebView. Not the
+        // marketing site (aiworkpay.fr, static): the Next.js app itself.
+        // Override for a staging server: ./gradlew assembleDebug -PappUrl=https://...
+        def appUrl = (project.findProperty('appUrl') ?: 'https://app.aiworkpay.fr').toString()
+        buildConfigField "String", "APP_URL", "\"${appUrl}\""
     }
 
     signingConfigs {

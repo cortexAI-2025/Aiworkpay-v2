@@ -4,6 +4,15 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 
+interface UploadedProof {
+  id: string;
+  filename: string;
+  mimeType: string | null;
+  size: number | null;
+}
+
+const ACCEPTED_FILES = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
+
 interface MissionActionsProps {
   mission: {
     id: string;
@@ -11,12 +20,14 @@ interface MissionActionsProps {
     assignedToUserId: string | null;
   };
   userId: string;
+  /** Files already uploaded by the assignee for this mission */
+  uploadedProofs: UploadedProof[];
   isAssignedToMe: boolean;
   stripeConnected: boolean;
   isAdmin: boolean;
 }
 
-export default function MissionActions({ mission, isAssignedToMe, stripeConnected, isAdmin }: MissionActionsProps) {
+export default function MissionActions({ mission, uploadedProofs, isAssignedToMe, stripeConnected, isAdmin }: MissionActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +41,67 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Erreur lors de l'acceptation"); return; }
       setSuccess('Mission acceptée !');
+      router.refresh();
+    } catch { setError('Erreur réseau'); }
+    finally { setLoading(false); }
+  };
+
+  const [resultNote, setResultNote] = useState('');
+  const [files, setFiles] = useState<UploadedProof[]>(uploadedProofs);
+  const [uploading, setUploading] = useState(false);
+
+  // One request per file, so that a failure names the file concerned
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (selected.length === 0) return;
+    setUploading(true);
+    setError('');
+    for (const file of selected) {
+      const body = new FormData();
+      body.append('file', file);
+      try {
+        const res = await fetch(`/api/missions/${mission.id}/proofs`, { method: 'POST', body });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(`${file.name} : ${data.error || 'envoi impossible'}`);
+          continue;
+        }
+        setFiles((current) => [...current, { id: data.id, filename: data.filename, mimeType: data.mimeType, size: data.size }]);
+      } catch {
+        setError(`${file.name} : erreur réseau`);
+      }
+    }
+    setUploading(false);
+  };
+
+  const handleRemoveFile = async (id: string) => {
+    setError('');
+    const res = await fetch(`/api/missions/${mission.id}/proofs/${id}`, { method: 'DELETE' });
+    if (res.ok) setFiles((current) => current.filter((f) => f.id !== id));
+    else setError((await res.json()).error || 'Suppression impossible');
+  };
+  const [proofLinks, setProofLinks] = useState('');
+
+  const handleDeliver = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+    // One https link per line, e.g. photos hosted on a shared drive
+    const attachments = proofLinks
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((url) => ({ url, filename: url.split('/').pop()?.split('?')[0] || url }));
+    try {
+      const res = await fetch(`/api/missions/${mission.id}/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: resultNote, attachments }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Erreur lors de la livraison'); return; }
+      setSuccess('Mission livrée !');
       router.refresh();
     } catch { setError('Erreur réseau'); }
     finally { setLoading(false); }
@@ -84,9 +156,59 @@ export default function MissionActions({ mission, isAssignedToMe, stripeConnecte
       )}
 
       {isAssignedToMe && mission.status === 'IN_PROGRESS' && (
-        <button onClick={() => handleStatusChange('DELIVERED')} disabled={loading} className="btn-primary w-full">
-          {loading ? 'Chargement...' : '📦 Marquer comme livrée'}
-        </button>
+        <form onSubmit={handleDeliver} className="space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Résultat</span>
+            <textarea
+              value={resultNote}
+              onChange={(e) => setResultNote(e.target.value)}
+              required
+              maxLength={20000}
+              rows={6}
+              className="input mt-1"
+              placeholder="Ce qui a été fait, constaté, avec la date et l'heure."
+            />
+          </label>
+          <div>
+            <span className="text-sm font-medium text-gray-700">Fichiers (photos, PDF — 10 Mo max. chacun)</span>
+            <input
+              type="file"
+              multiple
+              accept={ACCEPTED_FILES}
+              onChange={handleUpload}
+              disabled={uploading}
+              className="block w-full text-sm mt-1"
+            />
+            {uploading && <p className="text-xs text-gray-500 mt-1">Envoi en cours…</p>}
+            {files.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {files.map((f) => (
+                  <li key={f.id} className="flex items-center justify-between text-sm">
+                    <a href={`/api/missions/${mission.id}/proofs/${f.id}`} target="_blank" rel="noopener noreferrer" className="text-brand underline truncate">
+                      📎 {f.filename}
+                    </a>
+                    <button type="button" onClick={() => handleRemoveFile(f.id)} className="text-xs text-red-600 ml-2">
+                      Retirer
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Autres preuves (liens https, un par ligne)</span>
+            <textarea
+              value={proofLinks}
+              onChange={(e) => setProofLinks(e.target.value)}
+              rows={3}
+              className="input mt-1"
+              placeholder="https://..."
+            />
+          </label>
+          <button type="submit" disabled={loading || uploading || !resultNote.trim()} className="btn-primary w-full disabled:opacity-50">
+            {loading ? 'Envoi...' : '📦 Livrer la mission'}
+          </button>
+        </form>
       )}
 
       {mission.status === 'DELIVERED' && (

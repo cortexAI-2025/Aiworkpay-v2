@@ -1,153 +1,349 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { MissionStatus, Prisma, type ApiKey, type Mission } from '@prisma/client';
+import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
-import { validateApiKey } from '@/lib/apikey';
 import { stripe } from '@/lib/stripe';
 import { auth } from '@/auth';
+import {
+  apiError,
+  authenticateAgent,
+  extractApiKey,
+  fingerprint,
+  readIdempotencyKey,
+} from '@/lib/agentApi';
+import {
+  describePayment,
+  startCheckout,
+  startPaymentIntent,
+  type MissionPayment,
+} from '@/lib/missionPayment';
+import { hit, LIMITS } from '@/lib/rateLimit';
+import { missionForAgent, publicAttachment } from '@/lib/missionView';
 
-const createMissionSchema = z.object({
-  title: z.string().min(3).max(200),
-  description: z.string().min(10),
-  budget: z.number().positive(),
-  currency: z.string().length(3).default('EUR'),
-  deadline: z
-    .string()
-    .datetime({ offset: true })
-    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
-    .refine((val) => new Date(val) > new Date(), { message: 'La date limite doit être dans le futur' }),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
-  // Optionally provide a Stripe payment_method_id for immediate charge
-  paymentMethodId: z.string().optional(),
-});
+const createMissionSchema = z
+  .object({
+    title: z.string().min(3).max(200),
+    description: z.string().min(10),
+    budget: z.number().positive(),
+    currency: z.string().length(3).default('EUR'),
+    deadline: z
+      .string()
+      .datetime({ offset: true })
+      .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+      .refine((val) => new Date(val) > new Date(), { message: 'La date limite doit être dans le futur' }),
+    priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
+    // `checkout`: a hosted payment page for a human to pay.
+    // `payment_intent` (default): the agent confirms the payment itself.
+    paymentMode: z.enum(['checkout', 'payment_intent']).default('payment_intent'),
+    // Optionally provide a Stripe payment_method_id for immediate charge
+    paymentMethodId: z.string().optional(),
+  })
+  .refine((data) => !(data.paymentMode === 'checkout' && data.paymentMethodId), {
+    message: '`paymentMethodId` est incompatible avec `paymentMode: "checkout"`',
+    path: ['paymentMethodId'],
+  });
 
-function extractApiKey(request: NextRequest): string | null {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
-  return null;
-}
+type CreateMissionInput = z.infer<typeof createMissionSchema>;
 
 export async function POST(request: NextRequest) {
   try {
-    const rawKey = extractApiKey(request);
-    if (!rawKey) {
-      return NextResponse.json({ error: 'Clé API manquante' }, { status: 401 });
-    }
+    const { apiKey, response } = await authenticateAgent(request, 'missions:write');
+    if (response) return response;
 
-    const apiKey = await validateApiKey(rawKey);
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Clé API invalide ou désactivée' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const parsed = createMissionSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Données invalides', details: parsed.error.flatten() },
-        { status: 400 }
+    const idempotencyKey = readIdempotencyKey(request);
+    if (idempotencyKey === null) {
+      return apiError(
+        'INVALID_IDEMPOTENCY_KEY',
+        'En-tête Idempotency-Key invalide : 8 à 255 caractères parmi A-Z a-z 0-9 _ . : -',
+        400
       );
     }
 
-    const { title, description, budget, currency, deadline, priority, paymentMethodId } = parsed.data;
-    const amountCents = Math.round(budget * 100);
-
-    // Ensure the API key has a Stripe customer
-    let customerId = apiKey.stripeCustomerId;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        description: apiKey.label,
-        metadata: { apiKeyId: apiKey.id },
-      });
-      customerId = customer.id;
-      await prisma.apiKey.update({
-        where: { id: apiKey.id },
-        data: { stripeCustomerId: customerId },
-      });
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return apiError('INVALID_JSON', 'Corps JSON invalide', 400);
     }
+
+    const parsed = createMissionSchema.safeParse(body);
+    if (!parsed.success) {
+      return apiError('INVALID_BODY', 'Données invalides', 400, parsed.error.flatten());
+    }
+
+    const input = parsed.data;
+    const requestFingerprint = fingerprint(input);
+
+    // A retried request returns the mission created by the first one.
+    if (idempotencyKey) {
+      const existing = await prisma.mission.findUnique({
+        where: { createdByApiKeyId_idempotencyKey: { createdByApiKeyId: apiKey.id, idempotencyKey } },
+      });
+      if (existing) return await replay(existing, requestFingerprint, apiKey, input);
+    }
+
+    // Spending caps of this key, then the creation rate
+    if (apiKey.maxMissionBudget !== null && toCents(input.budget) > toCents(apiKey.maxMissionBudget)) {
+      return apiError(
+        'BUDGET_LIMIT_EXCEEDED',
+        `Le budget dépasse le plafond par mission de cette clé API (${Number(apiKey.maxMissionBudget)})`,
+        403,
+        { maxMissionBudget: Number(apiKey.maxMissionBudget) }
+      );
+    }
+    const creations = await hit(`key:${apiKey.id}:creations`, LIMITS.missionCreations);
+    if (!creations.allowed) {
+      return apiError(
+        'RATE_LIMITED',
+        'Trop de missions créées avec cette clé API ; réessayez plus tard',
+        429,
+        { retryAfterSeconds: creations.retryAfter },
+        { 'Retry-After': String(creations.retryAfter) }
+      );
+    }
+
+    const customerId = await ensureStripeCustomer(apiKey);
 
     // Create mission first
-    const mission = await prisma.mission.create({
-      data: {
-        title,
-        description,
-        budget,
-        currency: currency.toUpperCase(),
-        deadline: new Date(deadline),
-        priority,
+    let mission: Mission;
+    try {
+      mission = await createWithinMonthlyBudget(apiKey, input.budget, {
+        title: input.title,
+        description: input.description,
+        currency: input.currency.toUpperCase(),
+        deadline: new Date(input.deadline),
+        priority: input.priority,
         status: 'PAYMENT_PENDING',
         createdByApiKeyId: apiKey.id,
-      },
-    });
-
-    // Create Stripe PaymentIntent for the agent
-    const paymentIntentData: Parameters<typeof stripe.paymentIntents.create>[0] = {
-      amount: amountCents,
-      currency: currency.toLowerCase(),
-      customer: customerId,
-      metadata: { missionId: mission.id, apiKeyId: apiKey.id },
-      description: `Mission: ${title}`,
-    };
-
-    // If agent provides a payment method, confirm immediately
-    if (paymentMethodId) {
-      paymentIntentData.payment_method = paymentMethodId;
-      paymentIntentData.confirm = true;
-      paymentIntentData.return_url = process.env.NEXT_PUBLIC_APP_URL
-        ? `${process.env.NEXT_PUBLIC_APP_URL}/api/missions/${mission.id}/payment-success`
-        : undefined;
-    } else {
-      paymentIntentData.automatic_payment_methods = { enabled: true };
+        idempotencyKey: idempotencyKey ?? null,
+        idempotencyFingerprint: idempotencyKey ? requestFingerprint : null,
+      });
+    } catch (error) {
+      if (error instanceof MonthlyBudgetExceeded) {
+        return apiError(
+          'MONTHLY_BUDGET_EXCEEDED',
+          `Cette mission dépasserait le budget mensuel de cette clé API (${error.monthlyBudget}, déjà engagé : ${error.spent})`,
+          403,
+          { monthlyBudget: error.monthlyBudget, spentThisMonth: error.spent }
+        );
+      }
+      // Two concurrent requests with the same Idempotency-Key: the other one won.
+      if (idempotencyKey && isUniqueViolation(error)) {
+        const existing = await prisma.mission.findUniqueOrThrow({
+          where: { createdByApiKeyId_idempotencyKey: { createdByApiKeyId: apiKey.id, idempotencyKey } },
+        });
+        return await replay(existing, requestFingerprint, apiKey, input);
+      }
+      throw error;
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
-
-    // Store the PaymentIntent ID on the mission
-    await prisma.mission.update({
-      where: { id: mission.id },
-      data: { stripePaymentIntentId: paymentIntent.id },
-    });
-
-    return NextResponse.json(
-      {
-        mission: { ...mission, stripePaymentIntentId: paymentIntent.id },
-        payment: {
-          paymentIntentId: paymentIntent.id,
-          clientSecret: paymentIntent.client_secret,
-          status: paymentIntent.status,
-        },
-      },
-      { status: 201 }
-    );
+    return await attachPayment(mission, customerId, apiKey, input, 201);
   } catch (error) {
     console.error('Create mission error:', error);
-    return NextResponse.json({ error: 'Erreur interne du serveur' }, { status: 500 });
+    return apiError('INTERNAL_ERROR', 'Erreur interne du serveur', 500);
   }
 }
+
+function toCents(amount: number | Prisma.Decimal): number {
+  return Math.round(Number(amount) * 100);
+}
+
+class MonthlyBudgetExceeded extends Error {
+  constructor(
+    readonly monthlyBudget: number,
+    readonly spent: number
+  ) {
+    super('MONTHLY_BUDGET_EXCEEDED');
+  }
+}
+
+/**
+ * Create the mission, checking the key's monthly budget in the same
+ * transaction: an advisory lock per key serialises concurrent creations, so
+ * that two requests cannot both fit under the cap and exceed it together.
+ * Every mission of the calendar month (UTC) counts, except canceled ones.
+ */
+async function createWithinMonthlyBudget(
+  apiKey: ApiKey,
+  budget: number,
+  data: Omit<Prisma.MissionUncheckedCreateInput, 'budget'>
+): Promise<Mission> {
+  if (apiKey.monthlyBudget === null) return prisma.mission.create({ data: { ...data, budget } });
+
+  const monthlyBudget = apiKey.monthlyBudget;
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${apiKey.id}))::text`;
+
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const { _sum } = await tx.mission.aggregate({
+      _sum: { budget: true },
+      where: { createdByApiKeyId: apiKey.id, status: { not: 'CANCELED' }, createdAt: { gte: monthStart } },
+    });
+    const spent = toCents(_sum.budget ?? 0);
+    if (spent + toCents(budget) > toCents(monthlyBudget)) {
+      throw new MonthlyBudgetExceeded(Number(monthlyBudget), spent / 100);
+    }
+    return tx.mission.create({ data: { ...data, budget } });
+  });
+}
+
+async function ensureStripeCustomer(apiKey: ApiKey): Promise<string> {
+  // Each API key (agent) has its own Stripe customer
+  if (apiKey.stripeCustomerId) return apiKey.stripeCustomerId;
+
+  const customer = await stripe.customers.create(
+    { description: apiKey.label, metadata: { apiKeyId: apiKey.id } },
+    { idempotencyKey: `apikey_customer_${apiKey.id}` }
+  );
+  await prisma.apiKey.update({
+    where: { id: apiKey.id },
+    data: { stripeCustomerId: customer.id },
+  });
+  return customer.id;
+}
+
+/**
+ * Open the payment of a mission still awaiting it, record it on the mission,
+ * and answer with both. The Stripe calls carry an idempotency key derived from
+ * the mission id, so resuming after an uncertain failure never pays twice.
+ */
+async function attachPayment(
+  mission: Mission,
+  customerId: string,
+  apiKey: ApiKey,
+  input: CreateMissionInput,
+  status: 200 | 201
+): Promise<NextResponse> {
+  let payment: MissionPayment;
+  try {
+    payment =
+      input.paymentMode === 'checkout'
+        ? await startCheckout(mission, customerId, apiKey.id)
+        : await startPaymentIntent(mission, customerId, apiKey.id, input.paymentMethodId);
+  } catch (error) {
+    return paymentFailure(mission, error);
+  }
+
+  const updated = await prisma.mission.update({
+    where: { id: mission.id },
+    data:
+      payment.mode === 'checkout'
+        ? {
+            stripeCheckoutSessionId: payment.checkoutSessionId,
+            checkoutUrl: payment.url,
+            checkoutExpiresAt: payment.expiresAt ? new Date(payment.expiresAt) : null,
+          }
+        : { stripePaymentIntentId: payment.paymentIntentId },
+  });
+
+  return NextResponse.json(
+    { mission: updated, payment },
+    { status, headers: status === 200 ? { 'Idempotent-Replayed': 'true' } : undefined }
+  );
+}
+
+async function replay(
+  existing: Mission,
+  requestFingerprint: string,
+  apiKey: ApiKey,
+  input: CreateMissionInput
+): Promise<NextResponse> {
+  if (existing.idempotencyFingerprint !== requestFingerprint) {
+    return apiError(
+      'IDEMPOTENCY_KEY_REUSED',
+      'Cette Idempotency-Key a déjà servi pour une requête différente',
+      422
+    );
+  }
+
+  const payment = await describePayment(existing);
+  if (!payment && existing.status === 'PAYMENT_PENDING') {
+    // The first attempt stopped before its payment was recorded: resume it.
+    const customerId = await ensureStripeCustomer(apiKey);
+    return attachPayment(existing, customerId, apiKey, input, 200);
+  }
+
+  return NextResponse.json(
+    { mission: existing, payment },
+    { status: 200, headers: { 'Idempotent-Replayed': 'true' } }
+  );
+}
+
+/**
+ * When Stripe refused the card or the request, nothing can be paid: the
+ * mission is canceled and its Idempotency-Key released so that a corrected
+ * request can reuse it. Otherwise (network, Stripe outage, platform
+ * misconfiguration) the outcome is unknown and the mission is left awaiting
+ * payment: if Stripe did take the payment, the webhook still publishes it, and
+ * a retry with the same Idempotency-Key resumes it.
+ */
+async function paymentFailure(mission: Mission, error: unknown): Promise<NextResponse> {
+  console.error('Mission payment setup failed:', error);
+
+  if (error instanceof Stripe.errors.StripeCardError || error instanceof Stripe.errors.StripeInvalidRequestError) {
+    await prisma.mission.update({
+      where: { id: mission.id },
+      data: { status: 'CANCELED', idempotencyKey: null, idempotencyFingerprint: null },
+    });
+    return error instanceof Stripe.errors.StripeCardError
+      ? apiError('PAYMENT_FAILED', error.message, 402)
+      : apiError('PAYMENT_REJECTED', error.message, 422);
+  }
+
+  return apiError(
+    'PAYMENT_PROVIDER_UNAVAILABLE',
+    'Le prestataire de paiement est indisponible ; réessayez avec la même Idempotency-Key',
+    502,
+    { missionId: mission.id }
+  );
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+const statusFilterSchema = z.nativeEnum(MissionStatus);
 
 export async function GET(request: NextRequest) {
   try {
     const rawKey = extractApiKey(request);
-    const session = await auth();
+    const session = rawKey ? null : await auth();
 
     if (!rawKey && !session?.user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 'Non autorisé', 401);
     }
 
     const { searchParams } = new URL(request.url);
-    const where: Record<string, unknown> = {};
+    const where: Prisma.MissionWhereInput = {};
 
-    if (rawKey) {
-      const apiKey = await validateApiKey(rawKey);
-      if (!apiKey) {
-        return NextResponse.json({ error: 'Clé API invalide' }, { status: 403 });
+    const statusParam = searchParams.get('status');
+    let status: MissionStatus | undefined;
+    if (statusParam) {
+      const parsedStatus = statusFilterSchema.safeParse(statusParam);
+      if (!parsedStatus.success) {
+        return apiError('INVALID_STATUS', `Statut inconnu : ${statusParam}`, 400);
       }
-      where.createdByApiKeyId = apiKey.id;
-    } else {
-      const status = searchParams.get('status');
-      where.status = status || 'PUBLISHED';
+      status = parsedStatus.data;
     }
 
-    const take = Math.min(Math.abs(parseInt(searchParams.get('limit') || '50')), 100);
-    const skip = Math.max(0, parseInt(searchParams.get('skip') || '0'));
+    if (rawKey) {
+      const { apiKey, response } = await authenticateAgent(request, 'missions:read');
+      if (response) return response;
+      where.createdByApiKeyId = apiKey.id;
+      if (status) where.status = status;
+    } else if (session?.user.role === 'ADMIN') {
+      where.status = status ?? 'PUBLISHED';
+    } else {
+      // A Payworker sees the marketplace, and beyond it only its own missions:
+      // results and proofs of other Payworkers' missions are not theirs to read.
+      where.status = status ?? 'PUBLISHED';
+      if (where.status !== 'PUBLISHED') where.assignedToUserId = session?.user.id;
+    }
+
+    const take = Math.min(Math.abs(parseInt(searchParams.get('limit') || '50')) || 50, 100);
+    const skip = Math.max(0, parseInt(searchParams.get('skip') || '0') || 0);
 
     const missions = await prisma.mission.findMany({
       where,
@@ -157,9 +353,13 @@ export async function GET(request: NextRequest) {
       skip,
     });
 
-    return NextResponse.json(missions);
+    return NextResponse.json(
+      rawKey
+        ? missions.map(missionForAgent)
+        : missions.map((m) => ({ ...m, attachments: m.attachments.map(publicAttachment) }))
+    );
   } catch (error) {
     console.error('Get missions error:', error);
-    return NextResponse.json({ error: 'Erreur interne du serveur' }, { status: 500 });
+    return apiError('INTERNAL_ERROR', 'Erreur interne du serveur', 500);
   }
 }

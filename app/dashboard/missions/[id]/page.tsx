@@ -60,6 +60,16 @@ export default async function MissionDetailPage({
   const deadlineDate = new Date(mission.deadline);
   const isOverdue = deadlineDate < new Date() && !['COMPLETED', 'CANCELED'].includes(mission.status);
 
+  const briefAttachments = mission.attachments.filter((att) => att.kind === 'BRIEF');
+  const proofAttachments = mission.attachments.filter((att) => att.kind === 'PROOF');
+  // Uploaded files are served by the app after an access check, at a relative URL here
+  const proofHref = (att: (typeof proofAttachments)[number]) =>
+    att.storageKey ? `/api/missions/${mission.id}/proofs/${att.id}` : att.url;
+  const uploadedProofs = proofAttachments
+    .filter((att) => att.storageKey)
+    .map((att) => ({ id: att.id, filename: att.filename, mimeType: att.mimeType, size: att.size }));
+  const canSeeResult = isAssignedToMe || session.user.role === 'ADMIN';
+
   // Show 90/10 breakdown to assignee
   const showCommission = isAssignedToMe && Number(mission.budget) > 0;
   const payworkerEarning = showCommission
@@ -133,11 +143,11 @@ export default async function MissionDetailPage({
       </div>
 
       {/* Attachments */}
-      {mission.attachments.length > 0 && (
+      {briefAttachments.length > 0 && (
         <div className="card">
           <h2 className="font-semibold text-gray-900 mb-3">Pièces jointes</h2>
           <div className="space-y-2">
-            {mission.attachments.map((att) => (
+            {briefAttachments.map((att) => (
               <a
                 key={att.id}
                 href={att.url}
@@ -154,9 +164,63 @@ export default async function MissionDetailPage({
         </div>
       )}
 
+      {/* Changes requested by the agent */}
+      {isAssignedToMe && mission.status === 'IN_PROGRESS' && mission.revisionFeedback && (
+        <div className="card border-amber-300 bg-amber-50">
+          <h2 className="font-semibold text-amber-900 mb-2">Corrections demandées par l&apos;agent</h2>
+          <div className="text-amber-900 whitespace-pre-wrap text-sm leading-relaxed">{mission.revisionFeedback}</div>
+          <p className="text-xs text-amber-700 mt-2">Livrez à nouveau la mission ci-dessous ; vos nouvelles preuves remplacent les précédentes.</p>
+        </div>
+      )}
+
+      {/* Delivered result */}
+      {canSeeResult && mission.resultNote && (
+        <div className="card">
+          <h2 className="font-semibold text-gray-900 mb-1">Résultat livré</h2>
+          {mission.deliveredAt && (
+            <p className="text-xs text-gray-500 mb-3">
+              {new Date(mission.deliveredAt).toLocaleString('fr-FR')}
+            </p>
+          )}
+          <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">{mission.resultNote}</div>
+          {mission.resultData !== null && (
+            <pre className="mt-3 p-3 rounded-lg bg-gray-50 text-xs overflow-x-auto">
+              {JSON.stringify(mission.resultData, null, 2)}
+            </pre>
+          )}
+          {proofAttachments.some((att) => att.storageKey && att.mimeType?.startsWith('image/') && att.mimeType !== 'image/heic') && (
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
+              {proofAttachments
+                .filter((att) => att.storageKey && att.mimeType?.startsWith('image/') && att.mimeType !== 'image/heic')
+                .map((att) => (
+                  <a key={att.id} href={proofHref(att)} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- private file behind an access check */}
+                    <img src={proofHref(att)} alt={att.filename} className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                  </a>
+                ))}
+            </div>
+          )}
+          {proofAttachments.length > 0 && (
+            <ul className="mt-3 space-y-1">
+              {proofAttachments.map((att) => (
+                <li key={att.id}>
+                  <a href={proofHref(att)} target="_blank" rel="noopener noreferrer" className="text-sm text-brand underline break-all">
+                    📎 {att.filename}
+                  </a>
+                  {att.size && <span className="text-xs text-gray-400 ml-2">{(att.size / 1024).toFixed(0)} Ko</span>}
+                  {att.scanStatus === 'CLEAN' && <span className="text-xs text-green-700 ml-2">✓ analysé par l&apos;antivirus</span>}
+                  {att.scanStatus === 'NOT_SCANNED' && <span className="text-xs text-amber-700 ml-2">⚠ non analysé</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <MissionActions
         mission={{ id: mission.id, status: mission.status, assignedToUserId: mission.assignedToUserId }}
+        uploadedProofs={isAssignedToMe ? uploadedProofs : []}
         userId={session.user.id}
         isAssignedToMe={isAssignedToMe}
         stripeConnected={user?.stripeAccountOnboarded ?? false}

@@ -29,6 +29,16 @@ enum MissionStatus {
   CANCELED
 }
 
+enum ScanStatus {
+  CLEAN // scanned by ClamAV, no threat found
+  NOT_SCANNED // stored while scanning was turned off (ANTIVIRUS=off)
+}
+
+enum AttachmentKind {
+  BRIEF // provided with the mission
+  PROOF // delivered by the Payworker as proof of work
+}
+
 enum TransactionType {
   AGENT_PAYMENT
   PAYWORKER_PAYOUT
@@ -132,10 +142,22 @@ model User {
 }
 
 model ApiKey {
-  id     String  @id @default(uuid())
-  key    String  @unique
-  label  String
-  active Boolean @default(true)
+  id        String  @id @default(uuid())
+  // SHA-256 of the key: the key itself is shown once at creation, never stored
+  keyHash   String  @unique
+  // First characters of the key (awp_xxxxxxxx), to recognise it in the dashboard
+  keyPrefix String
+  label     String
+  active    Boolean @default(true)
+
+  // What the key may do: missions:read, missions:write, missions:approve
+  scopes     String[]  @default(["missions:read", "missions:write", "missions:approve"])
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+
+  // Spending caps, in the missions' currency (null = no cap)
+  maxMissionBudget Decimal? @db.Decimal(10, 2)
+  monthlyBudget    Decimal? @db.Decimal(10, 2)
 
   // Stripe: each agent (API key) has a Stripe customer for billing
   stripeCustomerId String?
@@ -161,6 +183,24 @@ model Mission {
   // Payment tracking (agent pays upfront)
   stripePaymentIntentId String?
 
+  // Hosted Stripe Checkout page, when the mission is paid by a human through a link
+  stripeCheckoutSessionId String?   @unique
+  checkoutUrl             String?
+  checkoutExpiresAt       DateTime?
+
+  // Idempotency-Key sent by the agent: a retried creation returns the same mission
+  idempotencyKey         String?
+  idempotencyFingerprint String?
+
+  // Result delivered by the Payworker
+  resultNote  String?
+  resultData  Json?
+  deliveredAt DateTime?
+
+  // Changes requested by the agent on a delivery (DELIVERED → IN_PROGRESS)
+  revisionFeedback String?
+  revisionCount    Int     @default(0)
+
   // Commission stored at time of completion
   platformFeeAmount Decimal? @db.Decimal(10, 2) // 10 %
   payworkerAmount   Decimal? @db.Decimal(10, 2) // 90 %
@@ -179,15 +219,25 @@ model Mission {
 
   attachments  MissionAttachment[]
   transactions Transaction[]
+
+  @@unique([createdByApiKeyId, idempotencyKey])
 }
 
 model MissionAttachment {
-  id        String   @id @default(uuid())
-  url       String
-  filename  String
-  mimeType  String?
-  size      Int?
-  createdAt DateTime @default(now())
+  id           String         @id @default(uuid())
+  url          String
+  filename     String
+  mimeType     String?
+  size         Int?
+  kind         AttachmentKind @default(BRIEF)
+  // Set for a file uploaded to private storage (served by the app after an
+  // access check); null for an external link
+  storageKey   String?        @unique
+  uploadedById String?
+  // Antivirus result for an uploaded file (null for an external link)
+  scanStatus   ScanStatus?
+  scannedAt    DateTime?
+  createdAt    DateTime       @default(now())
 
   missionId String
   mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
@@ -209,4 +259,13 @@ model Transaction {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Fixed-window counters shared by every instance of the app (rate limiting)
+model RateLimitBucket {
+  id        String   @id // "<bucket>:<window index>"
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }

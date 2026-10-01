@@ -27,7 +27,7 @@ const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDa
 export default function AdminSection() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [label, setLabel] = useState('');
-  const [scopes, setScopes] = useState<string[]>(SCOPES.map((s) => s.id));
+  const [scopes, setScopes] = useState<string[]>(['missions:read', 'missions:write']);
   const [expiresInDays, setExpiresInDays] = useState('');
   const [maxMissionBudget, setMaxMissionBudget] = useState('');
   const [monthlyBudget, setMonthlyBudget] = useState('');

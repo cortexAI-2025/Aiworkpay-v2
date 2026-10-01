@@ -10,7 +10,7 @@ const createKeySchema = z.object({
   scopes: z
     .array(z.enum(ALL_SCOPES as [ApiKeyScope, ...ApiKeyScope[]]))
     .min(1)
-    .default(ALL_SCOPES)
+    .default(['missions:read', 'missions:write'])
     .transform((scopes) => [...new Set(scopes)]),
   expiresInDays: z.number().int().min(1).max(3650).optional(),
   maxMissionBudget: z.number().positive().max(99_999_999).multipleOf(0.01).optional(),

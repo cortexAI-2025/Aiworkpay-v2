@@ -1,3 +1,4 @@
+import RetryPayout from './RetryPayout';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 
@@ -28,7 +29,7 @@ export default async function TransactionsPage() {
   const userId = session.user.id;
 
   const transactions = await prisma.transaction.findMany({
-    where: { userId },
+    where: session.user.role === 'ADMIN' ? {} : { userId },
     orderBy: { createdAt: 'desc' },
     include: { mission: { select: { title: true } } },
   });
@@ -102,6 +103,7 @@ export default async function TransactionsPage() {
                       <span className={`status-badge ${statusColors[t.status]}`}>
                         {statusLabels[t.status]}
                       </span>
+                      {session.user.role === 'ADMIN' && t.type === 'PAYWORKER_PAYOUT' && t.status !== 'SUCCEEDED' && t.missionId && <RetryPayout missionId={t.missionId} />}
                     </td>
                   </tr>
                 ))}

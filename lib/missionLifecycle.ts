@@ -3,7 +3,6 @@ import { prisma } from './prisma';
 import { stripe } from './stripe';
 import { releaseMissionPayment } from './missionPayment';
 
-const PLATFORM_FEE_RATE = 0.1; // 10 %
 const PAYWORKER_RATE = 0.9; // 90 %
 
 /** A delivered mission can be sent back to its Payworker at most this many times. */
@@ -32,12 +31,9 @@ export async function completeDeliveredMission(mission: Mission): Promise<Comple
 
   const budget = Number(mission.budget);
   const payworkerAmount = parseFloat((budget * PAYWORKER_RATE).toFixed(2));
-  const platformFeeAmount = parseFloat((budget * PLATFORM_FEE_RATE).toFixed(2));
+  const platformFeeAmount = Math.round((budget - payworkerAmount) * 100) / 100;
 
-  const payworker = await prisma.user.findUnique({
-    where: { id: payworkerId },
-    select: { stripeAccountId: true, stripeAccountOnboarded: true },
-  });
+
 
   // Claim completion and create the ledger atomically before calling Stripe.
   const completion = await prisma.$transaction(async (tx) => {
@@ -73,35 +69,8 @@ export async function completeDeliveredMission(mission: Mission): Promise<Comple
   });
   if (!completion) return null;
 
-  // Payworker payout transaction
-  let transferStatus: 'PENDING' | 'SUCCEEDED' = 'PENDING';
-  let stripeTransferId: string | undefined;
-
-  if (payworker?.stripeAccountId && payworker.stripeAccountOnboarded) {
-    // Transfer 90 % to payworker's connected Stripe account
-    try {
-      const transfer = await stripe.transfers.create(
-        {
-          amount: Math.round(payworkerAmount * 100),
-          currency: mission.currency.toLowerCase(),
-          destination: payworker.stripeAccountId,
-          transfer_group: `mission_${id}`,
-          metadata: { missionId: id },
-        },
-        { idempotencyKey: `mission_payout_${id}` }
-      );
-      stripeTransferId = transfer.id;
-      transferStatus = 'SUCCEEDED';
-    } catch (transferErr) {
-      console.error('Stripe transfer failed:', transferErr);
-      // Keep as PENDING — admin can retry
-    }
-  }
-
-  await prisma.transaction.update({
-    where: { id: completion.payoutId },
-    data: { status: transferStatus, stripeTransferId },
-  });
+  const payout = await retryMissionPayout(id);
+  const transferStatus = payout.status;
 
   return {
     mission: completion.updatedMission,
@@ -145,5 +114,42 @@ export async function cancelMission(mission: Mission, allowedFrom: readonly Miss
       data: { status: mission.status },
     });
     return { ok: false, reason: 'REFUND_FAILED' };
+  }
+}
+
+
+/** Retry a booked payout without creating another ledger entry or Stripe transfer. */
+export async function retryMissionPayout(missionId: string): Promise<{ status: 'PENDING' | 'SUCCEEDED'; reason?: string }> {
+  const payout = await prisma.transaction.findFirst({
+    where: { missionId, type: 'PAYWORKER_PAYOUT' },
+    include: { user: { select: { stripeAccountId: true, stripeAccountOnboarded: true } }, mission: true },
+  });
+  if (!payout || payout.mission?.status !== 'COMPLETED') throw new Error('PAYOUT_NOT_READY');
+  if (payout.status === 'SUCCEEDED') return { status: 'SUCCEEDED' };
+  if (!payout.user.stripeAccountId || !payout.user.stripeAccountOnboarded) return { status: 'PENDING', reason: 'CONNECT_NOT_READY' };
+  try {
+    // Stripe may expire idempotency keys after 24 hours. Reconcile a successful
+    // transfer before retrying an old or uncertain outcome.
+    const previous = await stripe.transfers.list({ transfer_group: `mission_${missionId}`, limit: 100 });
+    const existing = previous.data.find(t => t.metadata.missionId === missionId);
+    if (existing) {
+      if (existing.reversed || existing.amount !== Math.round(Number(payout.amount) * 100) || existing.currency !== payout.currency.toLowerCase()) {
+        return { status: 'PENDING', reason: 'TRANSFER_RECONCILIATION_REQUIRED' };
+      }
+      await prisma.transaction.update({ where: { id: payout.id }, data: { status: 'SUCCEEDED', stripeTransferId: existing.id } });
+      return { status: 'SUCCEEDED' };
+    }
+    const transfer = await stripe.transfers.create({
+      amount: Math.round(Number(payout.amount) * 100),
+      currency: payout.currency.toLowerCase(),
+      destination: payout.user.stripeAccountId,
+      transfer_group: `mission_${missionId}`,
+      metadata: { missionId },
+    }, { idempotencyKey: `mission_payout_${missionId}` });
+    await prisma.transaction.update({ where: { id: payout.id }, data: { status: 'SUCCEEDED', stripeTransferId: transfer.id } });
+    return { status: 'SUCCEEDED' };
+  } catch {
+    // Keep the booked payout pending, including when the network outcome is uncertain.
+    return { status: 'PENDING', reason: 'TRANSFER_UNAVAILABLE' };
   }
 }

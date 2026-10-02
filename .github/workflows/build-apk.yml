@@ -80,6 +80,11 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
+      # ── Assemble beta APK (offline demo) ─────────────────────────────────
+      - name: Phase 4b — Assemble beta APK (offline demo)
+        working-directory: android
+        run: ./gradlew assembleBeta --no-daemon
+
       # ── Upload debug APK ──────────────────────────────────────────────────
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -88,18 +93,34 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
 
+      # ── Upload beta APK ───────────────────────────────────────────────────
+      - name: Upload beta APK (offline demo)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiworkpay-beta-${{ github.sha }}
+          path: android/app/build/outputs/apk/beta/*.apk
+          retention-days: 30
+
       # ── Release keystore ──────────────────────────────────────────────────
+      # Skipped automatically if KEYSTORE_PASSWORD / KEY_PASSWORD are not set.
+      - name: Check signing secrets
+        id: signing
+        run: |
+          if [[ -n "${{ secrets.KEYSTORE_PASSWORD }}" && -n "${{ secrets.KEY_PASSWORD }}" ]]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "::warning::KEYSTORE_PASSWORD / KEY_PASSWORD not set — release signing skipped"
+          fi
+
       - name: Generate CI keystore & write keystore.properties
+        if: steps.signing.outputs.available == 'true'
         working-directory: android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS || 'aiworkpay' }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [[ -z "$KEYSTORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
-            echo "::error::KEYSTORE_PASSWORD and KEY_PASSWORD secrets must be set for release signing"
-            exit 1
-          fi
           keytool -genkeypair \
             -alias "$KEY_ALIAS" \
             -keyalg RSA \
@@ -116,10 +137,12 @@ jobs:
 
       # ── Signed release APK ────────────────────────────────────────────────
       - name: Build signed release APK
+        if: steps.signing.outputs.available == 'true'
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload signed release APK
+        if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: aiworkpay-release-${{ github.sha }}
@@ -128,6 +151,7 @@ jobs:
 
       # ── Release AAB (Play Store) ──────────────────────────────────────────
       - name: Build release AAB
+        if: steps.signing.outputs.available == 'true'
         working-directory: android
         run: ./gradlew bundleRelease --no-daemon
 

@@ -102,36 +102,30 @@ jobs:
           retention-days: 30
 
       # ── Release keystore ──────────────────────────────────────────────────
-      # Skipped automatically if KEYSTORE_PASSWORD / KEY_PASSWORD are not set.
+      # The Play Store requires every update to be signed with the same key, so
+      # the keystore is decoded from a secret, never generated on the fly.
+      # Create it once:  base64 -w0 aiworkpay-release.jks  → secret KEYSTORE_BASE64
+      # Skipped automatically if the signing secrets are not set.
       - name: Check signing secrets
         id: signing
         run: |
-          if [[ -n "${{ secrets.KEYSTORE_PASSWORD }}" && -n "${{ secrets.KEY_PASSWORD }}" ]]; then
+          if [[ -n "${{ secrets.KEYSTORE_BASE64 }}" && -n "${{ secrets.KEYSTORE_PASSWORD }}" && -n "${{ secrets.KEY_PASSWORD }}" ]]; then
             echo "available=true" >> $GITHUB_OUTPUT
           else
             echo "available=false" >> $GITHUB_OUTPUT
-            echo "::warning::KEYSTORE_PASSWORD / KEY_PASSWORD not set — release signing skipped"
+            echo "::warning::KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_PASSWORD not set — release signing skipped"
           fi
 
-      - name: Generate CI keystore & write keystore.properties
+      - name: Decode release keystore & write keystore.properties
         if: steps.signing.outputs.available == 'true'
         working-directory: android
         env:
+          KEYSTORE_BASE64:   ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS || 'aiworkpay' }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
         run: |
-          keytool -genkeypair \
-            -alias "$KEY_ALIAS" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storetype JKS \
-            -keystore app/keystore.jks \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass   "$KEY_PASSWORD" \
-            -dname "CN=Aiworkpay CI, OU=CI, O=Aiworkpay, L=Paris, S=IDF, C=FR" \
-            -noprompt
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > app/keystore.jks
           printf 'storeFile=keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
 
@@ -156,6 +150,7 @@ jobs:
         run: ./gradlew bundleRelease --no-daemon
 
       - name: Upload release AAB
+        if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: aiworkpay-aab-${{ github.sha }}

@@ -39,3 +39,8 @@ prisma/migrations/**/migration_lock.toml
 
 # Proof files uploaded with STORAGE_DRIVER=local
 uploads/
+
+# Android signing material
+*.jks
+*.keystore
+keystore.properties

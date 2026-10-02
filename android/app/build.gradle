@@ -46,7 +46,9 @@ android {
         beta {
             applicationIdSuffix ".beta"
             versionNameSuffix "-beta"
-            debuggable true
+            // Custom build types are unsigned by default; the debug key makes
+            // the APK installable on a test phone without the release keystore.
+            signingConfig signingConfigs.debug
             // Load the bundled offline demo instead of the live server
             buildConfigField "String", "APP_URL", '"file:///android_asset/index.html"'
         }

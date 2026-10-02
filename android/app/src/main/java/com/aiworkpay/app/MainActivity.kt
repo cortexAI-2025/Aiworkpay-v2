@@ -164,8 +164,10 @@ class MainActivity : AppCompatActivity() {
         ): Boolean {
             val url = request?.url?.toString() ?: return false
 
-            // Stay inside the app for our own domain
-            if (url.startsWith(appUrl) || url.startsWith("http://localhost")) {
+            // Stay inside the app for our own domain, localhost, and local assets
+            if (url.startsWith(appUrl) ||
+                url.startsWith("http://localhost") ||
+                url.startsWith("file://")) {
                 return false
             }
 

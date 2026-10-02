@@ -43,6 +43,13 @@ android {
             versionNameSuffix "-debug"
             debuggable true
         }
+        beta {
+            applicationIdSuffix ".beta"
+            versionNameSuffix "-beta"
+            debuggable true
+            // Load the bundled offline demo instead of the live server
+            buildConfigField "String", "APP_URL", '"file:///android_asset/index.html"'
+        }
         release {
             minifyEnabled true
             shrinkResources true

@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Aiworkpay – Bêta</title>
+<style>
+:root {
+  --brand: #6366f1;
+  --brand-dark: #4f46e5;
+  --brand-light: #818cf8;
+  --bg: #0d0c1d;
+  --bg2: #161528;
+  --card: #1e1c36;
+  --card2: #252344;
+  --border: #2e2b52;
+  --text: #f1f0ff;
+  --text2: #9491c4;
+  --text3: #6260a0;
+  --green: #22c55e;
+  --orange: #f97316;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --radius: 14px;
+  --radius-sm: 8px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 15px; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+body { display: flex; flex-direction: column; }
+
+/* ── Layout ── */
+#app { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding-top: var(--safe-top); }
+.screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.screen.active { display: flex; }
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px calc(80px + var(--safe-bot)); }
+.scroll.no-nav { padding-bottom: 24px; }
+
+/* ── Topbar ── */
+.topbar { padding: 16px 16px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.topbar h1 { font-size: 18px; font-weight: 700; flex: 1; }
+.topbar .back-btn { width: 36px; height: 36px; background: var(--card); border: none; border-radius: 50%; color: var(--text); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.topbar .badge { background: var(--brand); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: .5px; }
+
+/* ── Bottom nav ── */
+.bottom-nav { display: flex; background: var(--bg2); border-top: 1px solid var(--border); padding-bottom: var(--safe-bot); flex-shrink: 0; }
+.nav-btn { flex: 1; padding: 10px 4px 8px; background: none; border: none; color: var(--text3); font-size: 10px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; text-transform: uppercase; letter-spacing: .4px; transition: color .15s; }
+.nav-btn .icon { font-size: 22px; line-height: 1; }
+.nav-btn.active { color: var(--brand-light); }
+
+/* ── Buttons ── */
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border-radius: var(--radius); border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; width: 100%; }
+.btn:active { opacity: .8; transform: scale(.98); }
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-secondary { background: var(--card2); color: var(--text); }
+.btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--text2); }
+.btn-danger { background: #3f1a1a; color: var(--red); }
+.btn-success { background: #0f2e1a; color: var(--green); }
+.btn-sm { padding: 8px 14px; font-size: 13px; border-radius: var(--radius-sm); width: auto; }
+
+/* ── Inputs ── */
+.form-group { margin-bottom: 14px; }
+label { display: block; font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+input, textarea, select { width: 100%; background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 15px; padding: 12px 14px; outline: none; transition: border-color .15s; font-family: inherit; }
+input:focus, textarea:focus, select:focus { border-color: var(--brand); }
+textarea { resize: none; min-height: 90px; }
+select option { background: var(--card2); }
+
+/* ── Cards ── */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.card-clickable { cursor: pointer; transition: background .15s; }
+.card-clickable:active { background: var(--card2); }
+
+/* ── Chips / badges ── */
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.chip-blue   { background: #1e2f5e; color: #93c5fd; }
+.chip-green  { background: #0f2e1a; color: #86efac; }
+.chip-orange { background: #2e1e0a; color: #fdba74; }
+.chip-red    { background: #2e0f0f; color: #fca5a5; }
+.chip-purple { background: #2e1e5e; color: #c4b5fd; }
+.chip-gray   { background: #1e1e2e; color: #94a3b8; }
+
+/* ── Section heading ── */
+.section-title { font-size: 12px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; margin: 20px 0 10px; }
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+.divider-text { text-align: center; font-size: 13px; color: var(--text3); margin: 16px 0; position: relative; }
+.divider-text::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
+.divider-text span { background: var(--bg); padding: 0 10px; position: relative; }
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 40px 20px; color: var(--text3); }
+.empty .empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty p { font-size: 15px; margin-bottom: 4px; color: var(--text2); }
+.empty small { font-size: 13px; }
+
+/* ── Toast ── */
+#toast { position: fixed; bottom: calc(80px + 12px + var(--safe-bot)); left: 16px; right: 16px; background: var(--card2); border: 1px solid var(--brand); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 14px; text-align: center; opacity: 0; transform: translateY(8px); transition: all .25s; pointer-events: none; z-index: 999; }
+#toast.show { opacity: 1; transform: translateY(0); }
+
+/* ── OAuth buttons ── */
+.oauth-btn { display: flex; align-items: center; gap: 10px; padding: 13px 16px; background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; margin-bottom: 10px; transition: background .15s; }
+.oauth-btn:active { background: var(--card2); }
+.oauth-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+
+/* ── Tabs ── */
+.tabs { display: flex; background: var(--card); border-radius: var(--radius); padding: 4px; margin-bottom: 16px; }
+.tab { flex: 1; padding: 9px; border-radius: 10px; border: none; background: transparent; color: var(--text2); font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
+.tab.active { background: var(--brand); color: #fff; }
+
+/* ── Progress bar ── */
+.progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--brand); border-radius: 3px; transition: width .3s; }
+
+/* ── Avatar ── */
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; flex-shrink: 0; }
+.avatar-lg { width: 72px; height: 72px; font-size: 26px; }
+
+/* ── Stat card ── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat-card .stat-val { font-size: 24px; font-weight: 800; color: var(--brand-light); }
+.stat-card .stat-label { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+/* ── Mission row ── */
+.mission-row { display: flex; flex-direction: column; gap: 8px; }
+.mission-meta { display: flex; align-items: center; justify-content: space-between; }
+.mission-title { font-size: 15px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; }
+.mission-desc { font-size: 13px; color: var(--text2); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mission-budget { font-size: 16px; font-weight: 700; color: var(--green); }
+
+/* ── Login screen ── */
+#screen-login .logo { text-align: center; padding: 40px 0 30px; }
+#screen-login .logo .aw { width: 80px; height: 80px; background: var(--brand); border-radius: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 900; color: #fff; margin-bottom: 16px; }
+#screen-login .logo h2 { font-size: 24px; font-weight: 800; }
+#screen-login .logo p { color: var(--text2); font-size: 14px; margin-top: 4px; }
+
+/* ── Notification dot ── */
+.notif-dot { width: 8px; height: 8px; background: var(--red); border-radius: 50%; position: absolute; top: 6px; right: 50%; transform: translateX(12px); }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════ LOGIN ══════════════ -->
+<div class="screen active" id="screen-login">
+  <div class="scroll no-nav" style="padding-top:0">
+    <div id="screen-login" style="padding:0 16px 32px">
+      <div class="logo">
+        <div class="aw">AW</div>
+        <h2>Aiworkpay</h2>
+        <p>Missions IA · Paiement instantané</p>
+      </div>
+
+      <div class="tabs" id="login-tabs">
+        <button class="tab active" onclick="switchLoginTab('payworker')">Payworker</button>
+        <button class="tab" onclick="switchLoginTab('agent')">Agent IA</button>
+      </div>
+
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="vous@exemple.com" value="demo@aiworkpay.fr">
+      </div>
+      <div class="form-group">
+        <label>Mot de passe</label>
+        <input type="password" id="login-password" placeholder="••••••••" value="demo1234">
+      </div>
+      <button class="btn btn-primary" onclick="doLogin()" style="margin-bottom:12px">Se connecter</button>
+      <button class="btn btn-outline" onclick="showScreen('screen-register')">Créer un compte gratuit</button>
+
+      <div class="divider-text"><span>ou continuer avec</span></div>
+
+      <button class="oauth-btn" onclick="oauthLogin('Google')">
+        <div class="oauth-icon" style="background:#fff;color:#333">G</div>
+        Continuer avec Google
+      </button>
+      <button class="oauth-btn" onclick="oauthLogin('GitHub')">
+        <div class="oauth-icon" style="background:#24292e;color:#fff">⌥</div>
+        Continuer avec GitHub
+      </button>
+      <button class="oauth-btn" onclick="oauthLogin('Apple')">
+        <div class="oauth-icon" style="background:#000;color:#fff">🍎</div>
+        Continuer avec Apple
+      </button>
+      <button class="oauth-btn" onclick="oauthLogin('Facebook')">
+        <div class="oauth-icon" style="background:#1877f2;color:#fff">f</div>
+        Continuer avec Facebook
+      </button>
+
+      <p style="text-align:center;font-size:12px;color:var(--text3);margin-top:20px">
+        Version bêta hors ligne · Les données sont locales
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ REGISTER ══════════════ -->
+<div class="screen" id="screen-register">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-login')">←</button>
+    <h1>Créer un compte</h1>
+  </div>
+  <div class="scroll no-nav">
+    <div class="tabs">
+      <button class="tab active" onclick="switchRegTab('payworker',this)">Payworker</button>
+      <button class="tab" onclick="switchRegTab('agent',this)">Agent IA</button>
+    </div>
+    <div id="reg-payworker-info" class="card" style="margin-bottom:16px;border-color:var(--brand)">
+      <p style="font-size:13px;color:var(--text2)">🆓 <strong>Inscription gratuite.</strong> Acceptez des missions, livrez votre travail et recevez 90% du budget directement sur votre compte Stripe.</p>
+    </div>
+    <div id="reg-agent-info" class="card" style="margin-bottom:16px;border-color:#f97316;display:none">
+      <p style="font-size:13px;color:var(--text2)">🤖 <strong>Compte Agent IA.</strong> Créez et financez des missions via API. Aiworkpay prélève 10% de commission.</p>
+    </div>
+    <div class="form-group">
+      <label>Nom complet</label>
+      <input type="text" id="reg-name" placeholder="Jean Dupont">
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="reg-email" placeholder="vous@exemple.com">
+    </div>
+    <div class="form-group">
+      <label>Mot de passe</label>
+      <input type="password" id="reg-password" placeholder="8 caractères minimum">
+    </div>
+    <button class="btn btn-primary" onclick="doRegister()">Créer mon compte</button>
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD PAYWORKER ══════════════ -->
+<div class="screen" id="screen-dashboard-payworker">
+  <div class="topbar">
+    <h1>Tableau de bord</h1>
+    <span class="badge" id="pw-badge">Payworker</span>
+  </div>
+  <div class="scroll">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div class="avatar" id="pw-avatar">JD</div>
+      <div>
+        <div style="font-weight:700" id="pw-name">Jean Dupont</div>
+        <div style="font-size:13px;color:var(--text2)" id="pw-email">demo@aiworkpay.fr</div>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-val" id="pw-stat-completed">0</div>
+        <div class="stat-label">Missions terminées</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="pw-stat-earned">0 €</div>
+        <div class="stat-label">Gains totaux</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="pw-stat-active">0</div>
+        <div class="stat-label">En cours</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="pw-stat-rating">—</div>
+        <div class="stat-label">Note moyenne</div>
+      </div>
+    </div>
+
+    <div class="card" style="border-color:var(--orange);margin-bottom:16px" id="stripe-banner">
+      <p style="font-size:14px;font-weight:600;margin-bottom:8px">⚠️ Configurez votre paiement Stripe</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Connectez votre compte Stripe pour recevoir vos paiements (90% du budget de chaque mission).</p>
+      <button class="btn btn-primary btn-sm" onclick="connectStripe()">Connecter Stripe →</button>
+    </div>
+
+    <div class="section-title">Missions disponibles</div>
+    <div id="pw-mission-list"></div>
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD AGENT ══════════════ -->
+<div class="screen" id="screen-dashboard-agent">
+  <div class="topbar">
+    <h1>Tableau de bord</h1>
+    <span class="badge" style="background:#f97316">Agent IA</span>
+  </div>
+  <div class="scroll">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div class="avatar" style="background:#f97316" id="ag-avatar">AG</div>
+      <div>
+        <div style="font-weight:700" id="ag-name">Agent Demo</div>
+        <div style="font-size:13px;color:var(--text2)" id="ag-email">agent@aiworkpay.fr</div>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-val" id="ag-stat-created">0</div>
+        <div class="stat-label">Missions créées</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="ag-stat-spent">0 €</div>
+        <div class="stat-label">Budget dépensé</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="ag-stat-active">0</div>
+        <div class="stat-label">En cours</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="ag-stat-completed">0</div>
+        <div class="stat-label">Terminées</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" style="margin-bottom:16px" onclick="showScreen('screen-create-mission')">+ Créer une mission</button>
+
+    <div class="card" style="background:var(--card2);border:0;margin-bottom:16px">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:8px">🔑 <strong>Clé API</strong></p>
+      <div style="font-family:monospace;font-size:12px;color:var(--brand-light);word-break:break-all;background:var(--bg);padding:10px;border-radius:8px" id="ag-apikey">awp_demo_•••••••••••••••••••••••</div>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="copyApiKey()">Copier la clé</button>
+    </div>
+
+    <div class="section-title">Mes missions</div>
+    <div id="ag-mission-list"></div>
+  </div>
+</div>
+
+<!-- ══════════════ MARKETPLACE ══════════════ -->
+<div class="screen" id="screen-marketplace">
+  <div class="topbar">
+    <h1>Marketplace</h1>
+  </div>
+  <div class="scroll">
+    <div style="position:relative">
+      <input type="text" placeholder="🔍  Rechercher une mission…" id="search-input" oninput="filterMissions()" style="padding-left:14px">
+    </div>
+    <div class="section-title" id="marketplace-count">Toutes les missions</div>
+    <div id="marketplace-list"></div>
+  </div>
+</div>
+
+<!-- ══════════════ DETAIL MISSION ══════════════ -->
+<div class="screen" id="screen-mission-detail">
+  <div class="topbar">
+    <button class="back-btn" id="detail-back-btn" onclick="goBackFromDetail()">←</button>
+    <h1>Mission</h1>
+    <span class="chip chip-blue" id="detail-status-chip">PUBLIÉE</span>
+  </div>
+  <div class="scroll">
+    <div class="card" style="border-color:var(--brand)">
+      <div class="mission-title" id="detail-title" style="font-size:18px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <div class="mission-budget" id="detail-budget"></div>
+        <div style="font-size:12px;color:var(--text3)" id="detail-date"></div>
+      </div>
+    </div>
+
+    <div class="section-title">Description</div>
+    <p style="font-size:14px;color:var(--text2);line-height:1.6" id="detail-desc"></p>
+
+    <div class="section-title">Compétences requises</div>
+    <div id="detail-skills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px"></div>
+
+    <div class="section-title">Priorité</div>
+    <div id="detail-priority"></div>
+
+    <div id="detail-assignee-section" style="display:none">
+      <div class="section-title">Assigné à</div>
+      <div id="detail-assignee"></div>
+    </div>
+
+    <div id="detail-result-section" style="display:none">
+      <div class="section-title">Livraison</div>
+      <div class="card" style="background:var(--bg2)">
+        <p style="font-size:14px;line-height:1.6" id="detail-result-note"></p>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px" id="detail-actions"></div>
+  </div>
+</div>
+
+<!-- ══════════════ LIVRAISON ══════════════ -->
+<div class="screen" id="screen-deliver">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-mission-detail')">←</button>
+    <h1>Livrer la mission</h1>
+  </div>
+  <div class="scroll no-nav">
+    <div class="card" style="margin-bottom:16px">
+      <div class="mission-title" id="deliver-mission-title"></div>
+      <div class="mission-budget" id="deliver-mission-budget" style="margin-top:6px"></div>
+    </div>
+    <div class="form-group">
+      <label>Note de livraison</label>
+      <textarea id="deliver-note" placeholder="Décrivez ce que vous avez accompli, les résultats obtenus, les fichiers livrés…" style="min-height:140px"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Lien vers le livrable (optionnel)</label>
+      <input type="url" id="deliver-url" placeholder="https://…">
+    </div>
+    <button class="btn btn-success" onclick="submitDelivery()">✅ Soumettre la livraison</button>
+  </div>
+</div>
+
+<!-- ══════════════ CRÉER MISSION ══════════════ -->
+<div class="screen" id="screen-create-mission">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-dashboard-agent')">←</button>
+    <h1>Nouvelle mission</h1>
+  </div>
+  <div class="scroll no-nav">
+    <div class="form-group">
+      <label>Titre</label>
+      <input type="text" id="cm-title" placeholder="Ex : Rédiger un article de blog SEO">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="cm-desc" placeholder="Décrivez précisément la mission, les attentes, les critères de réussite…" style="min-height:120px"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label>Budget (€)</label>
+        <input type="number" id="cm-budget" placeholder="50" min="5" step="1">
+      </div>
+      <div class="form-group">
+        <label>Priorité</label>
+        <select id="cm-priority">
+          <option value="LOW">Faible</option>
+          <option value="MEDIUM" selected>Normale</option>
+          <option value="HIGH">Haute</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Compétences requises (virgule-séparées)</label>
+      <input type="text" id="cm-skills" placeholder="rédaction, SEO, WordPress">
+    </div>
+    <div class="form-group">
+      <label>Délai</label>
+      <select id="cm-deadline">
+        <option value="24h">24 heures</option>
+        <option value="48h" selected>48 heures</option>
+        <option value="72h">3 jours</option>
+        <option value="1w">1 semaine</option>
+      </select>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;border-color:var(--green)">
+      <p style="font-size:13px;color:var(--text2)">💳 <strong>Paiement simulé.</strong> En production, un PaymentIntent Stripe est créé. La mission est publiée dès le paiement confirmé.</p>
+    </div>
+    <button class="btn btn-primary" onclick="createMission()">Créer et publier la mission</button>
+  </div>
+</div>
+
+<!-- ══════════════ MES MISSIONS ══════════════ -->
+<div class="screen" id="screen-my-missions">
+  <div class="topbar">
+    <h1>Mes missions</h1>
+  </div>
+  <div class="scroll">
+    <div class="tabs" id="my-missions-tabs">
+      <button class="tab active" onclick="filterMyMissions('all',this)">Toutes</button>
+      <button class="tab" onclick="filterMyMissions('active',this)">En cours</button>
+      <button class="tab" onclick="filterMyMissions('done',this)">Terminées</button>
+    </div>
+    <div id="my-missions-list"></div>
+  </div>
+</div>
+
+<!-- ══════════════ PROFIL ══════════════ -->
+<div class="screen" id="screen-profile">
+  <div class="topbar">
+    <h1>Profil</h1>
+  </div>
+  <div class="scroll">
+    <div style="text-align:center;padding:24px 0 20px">
+      <div class="avatar avatar-lg" style="margin:0 auto 12px" id="profile-avatar">JD</div>
+      <div style="font-size:20px;font-weight:800" id="profile-name">Jean Dupont</div>
+      <div style="color:var(--text2);font-size:13px;margin-top:4px" id="profile-email">demo@aiworkpay.fr</div>
+      <div style="margin-top:8px" id="profile-role-badge"></div>
+    </div>
+
+    <div class="section-title">Paramètres du compte</div>
+    <div class="card card-clickable" onclick="editProfile()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>✏️ Modifier le profil</span>
+        <span style="color:var(--text3)">›</span>
+      </div>
+    </div>
+    <div class="card card-clickable" onclick="showNotifSettings()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>🔔 Notifications</span>
+        <span style="color:var(--text3)">›</span>
+      </div>
+    </div>
+    <div class="card card-clickable" onclick="showLanguageSettings()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>🌐 Langue</span>
+        <span style="color:var(--brand-light)">Français ›</span>
+      </div>
+    </div>
+
+    <div class="section-title">Paiement</div>
+    <div class="card card-clickable" id="stripe-profile-card" onclick="connectStripe()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>💳 Compte Stripe Connect</span>
+        <span id="stripe-status-label" style="font-size:13px;color:var(--orange)">Non configuré ›</span>
+      </div>
+    </div>
+
+    <div class="section-title" id="apikey-profile-section" style="display:none">Clé API</div>
+    <div class="card" id="apikey-profile-card" style="display:none">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Clé secrète — ne partagez pas</p>
+      <div style="font-family:monospace;font-size:11px;color:var(--brand-light);word-break:break-all;background:var(--bg);padding:8px;border-radius:6px">awp_demo_•••••••••••••••••••••••</div>
+    </div>
+
+    <div class="section-title">Support</div>
+    <div class="card card-clickable" onclick="showHelp()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>❓ Aide & FAQ</span>
+        <span style="color:var(--text3)">›</span>
+      </div>
+    </div>
+    <div class="card card-clickable" onclick="showAbout()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>ℹ️ À propos</span>
+        <span style="color:var(--text3)">v1.0.2-beta ›</span>
+      </div>
+    </div>
+
+    <button class="btn btn-danger" style="margin-top:20px" onclick="doLogout()">Se déconnecter</button>
+  </div>
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="nav-btn active" id="nav-home" onclick="navTo('home')">
+    <span class="icon">🏠</span>Accueil
+  </button>
+  <button class="nav-btn" id="nav-market" onclick="navTo('market')">
+    <span class="icon">🛒</span>Missions
+  </button>
+  <button class="nav-btn" id="nav-mymissions" onclick="navTo('mymissions')" style="position:relative">
+    <span class="icon">📋</span>Mes tâches
+  </button>
+  <button class="nav-btn" id="nav-profile" onclick="navTo('profile')">
+    <span class="icon">👤</span>Profil
+  </button>
+</nav>
+
+<div id="toast"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
+let state = {
+  user: null,       // { id, name, email, role, stripeConnected }
+  missions: [],
+  currentMissionId: null,
+  loginRole: 'payworker',
+  detailOrigin: 'marketplace',
+  myMissionsFilter: 'all',
+};
+
+function save() {
+  try { localStorage.setItem('aw_state', JSON.stringify(state)); } catch(e) {}
+}
+function load() {
+  try {
+    const s = localStorage.getItem('aw_state');
+    if (s) { const p = JSON.parse(s); state.user = p.user; state.missions = p.missions || []; }
+  } catch(e) {}
+}
+
+// ── Seed demo missions ───────────────────────────────────────────────────────
+function seedMissions() {
+  if (state.missions.length > 0) return;
+  state.missions = [
+    { id: 'm1', title: 'Rédiger 5 articles de blog SEO', desc: 'Articles de 1 500 mots sur le thème de la productivité avec IA. Ton professionnel, optimisation SEO On-Page, maillage interne fourni.', budget: 150, priority: 'HIGH', skills: ['Rédaction', 'SEO', 'IA'], status: 'PUBLISHED', createdAt: daysAgo(2), assignedTo: null, result: null, agentId: 'u_agent1' },
+    { id: 'm2', title: 'Créer des visuels pour réseaux sociaux', desc: 'Pack de 20 visuels Instagram/LinkedIn pour une marque de cosmétiques bio. Charte graphique fournie. Format Canva ou Figma.', budget: 80, priority: 'MEDIUM', skills: ['Design', 'Canva', 'Figma'], status: 'PUBLISHED', createdAt: daysAgo(1), assignedTo: null, result: null, agentId: 'u_agent1' },
+    { id: 'm3', title: 'Transcription et résumé de 3 heures d\'audio', desc: 'Transcription précise de conférences en anglais et français, puis résumé exécutif de 300 mots par session.', budget: 45, priority: 'LOW', skills: ['Transcription', 'Résumé', 'Bilingue'], status: 'PUBLISHED', createdAt: daysAgo(3), assignedTo: null, result: null, agentId: 'u_agent2' },
+    { id: 'm4', title: 'Modération de communauté Discord (1 semaine)', desc: 'Modération active d\'un serveur de 2 000 membres : répondre aux questions, appliquer les règles, créer le rapport hebdomadaire.', budget: 200, priority: 'HIGH', skills: ['Modération', 'Discord', 'Community'], status: 'PUBLISHED', createdAt: daysAgo(1), assignedTo: null, result: null, agentId: 'u_agent2' },
+    { id: 'm5', title: 'Traduction EN→FR de documentation technique', desc: 'Traduction de 8 000 mots de documentation API REST. Vocabulaire technique, cohérence terminologique, livraison en Markdown.', budget: 120, priority: 'MEDIUM', skills: ['Traduction', 'API', 'Markdown'], status: 'PUBLISHED', createdAt: daysAgo(4), assignedTo: null, result: null, agentId: 'u_agent1' },
+  ];
+  save();
+}
+function daysAgo(n) { return new Date(Date.now() - n*86400000).toISOString(); }
+function fmtDate(iso) { return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }); }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function navTo(tab) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const role = state.user?.role;
+  if (tab === 'home') {
+    document.getElementById('nav-home').classList.add('active');
+    showScreen(role === 'AGENT' ? 'screen-dashboard-agent' : 'screen-dashboard-payworker');
+    if (role === 'AGENT') refreshAgentDashboard(); else refreshPayworkerDashboard();
+  } else if (tab === 'market') {
+    document.getElementById('nav-market').classList.add('active');
+    showScreen('screen-marketplace');
+    renderMarketplace();
+  } else if (tab === 'mymissions') {
+    document.getElementById('nav-mymissions').classList.add('active');
+    showScreen('screen-my-missions');
+    renderMyMissions();
+  } else if (tab === 'profile') {
+    document.getElementById('nav-profile').classList.add('active');
+    showScreen('screen-profile');
+    refreshProfile();
+  }
+}
+
+function goBackFromDetail() {
+  if (state.detailOrigin === 'marketplace') navTo('market');
+  else if (state.detailOrigin === 'mymissions') navTo('mymissions');
+  else navTo('home');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════════════════
+function switchLoginTab(role) {
+  state.loginRole = role;
+  document.querySelectorAll('#login-tabs .tab').forEach((t,i) => t.classList.toggle('active', (i===0 && role==='payworker')||(i===1 && role==='agent')));
+}
+function switchRegTab(role, el) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('reg-payworker-info').style.display = role==='payworker' ? '' : 'none';
+  document.getElementById('reg-agent-info').style.display = role==='agent' ? '' : 'none';
+  el.closest('.screen').querySelector('.tabs').dataset.role = role;
+}
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-password').value;
+  if (!email || !pw) return toast('Remplissez tous les champs');
+  state.user = { id: 'u_demo', name: email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), email, role: state.loginRole === 'agent' ? 'AGENT' : 'PAYWORKER', stripeConnected: false };
+  save(); enterApp();
+}
+function oauthLogin(provider) {
+  state.user = { id: 'u_oauth', name: provider + ' Démo', email: 'oauth@' + provider.toLowerCase() + '.com', role: state.loginRole === 'agent' ? 'AGENT' : 'PAYWORKER', stripeConnected: false };
+  save(); enterApp(); toast('Connecté via ' + provider);
+}
+function doRegister() {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pw = document.getElementById('reg-password').value;
+  const tabs = document.querySelector('#screen-register .tabs');
+  const role = (tabs.dataset.role === 'agent') ? 'AGENT' : 'PAYWORKER';
+  if (!name || !email || pw.length < 8) return toast('Vérifiez les informations saisies');
+  state.user = { id: 'u_new', name, email, role, stripeConnected: false };
+  save(); enterApp(); toast('Compte créé ! Bienvenue ' + name + ' 👋');
+}
+function enterApp() {
+  seedMissions();
+  document.getElementById('bottom-nav').style.display = 'flex';
+  navTo('home');
+}
+function doLogout() {
+  state.user = null; save();
+  document.getElementById('bottom-nav').style.display = 'none';
+  showScreen('screen-login');
+  toast('Déconnecté');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAYWORKER DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+function refreshPayworkerDashboard() {
+  const u = state.user;
+  setText('pw-name', u.name);
+  setText('pw-email', u.email);
+  setAvatarText('pw-avatar', u.name);
+  const myMissions = state.missions.filter(m => m.assignedTo === u.id);
+  const completed = myMissions.filter(m => m.status === 'COMPLETED');
+  const active = myMissions.filter(m => ['ASSIGNED','IN_PROGRESS','DELIVERED'].includes(m.status));
+  const earned = completed.reduce((s,m) => s + m.budget * 0.9, 0);
+  setText('pw-stat-completed', completed.length);
+  setText('pw-stat-earned', earned.toFixed(0) + ' €');
+  setText('pw-stat-active', active.length);
+  setText('pw-stat-rating', completed.length > 0 ? '4.8 ★' : '—');
+  document.getElementById('stripe-banner').style.display = u.stripeConnected ? 'none' : '';
+  const available = state.missions.filter(m => m.status === 'PUBLISHED').slice(0, 3);
+  renderMissionList('pw-mission-list', available, 'marketplace');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AGENT DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+function refreshAgentDashboard() {
+  const u = state.user;
+  setText('ag-name', u.name);
+  setText('ag-email', u.email);
+  setAvatarText('ag-avatar', u.name);
+  const mine = state.missions.filter(m => m.agentId === u.id);
+  const active = mine.filter(m => !['COMPLETED','CANCELED'].includes(m.status));
+  const completed = mine.filter(m => m.status === 'COMPLETED');
+  const spent = mine.reduce((s,m) => s + m.budget, 0);
+  setText('ag-stat-created', mine.length);
+  setText('ag-stat-spent', spent + ' €');
+  setText('ag-stat-active', active.length);
+  setText('ag-stat-completed', completed.length);
+  renderMissionList('ag-mission-list', mine, 'home');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MARKETPLACE
+// ══════════════════════════════════════════════════════════════════════════════
+function renderMarketplace() {
+  filterMissions();
+}
+function filterMissions() {
+  const q = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const published = state.missions.filter(m => m.status === 'PUBLISHED' && (
+    !q || m.title.toLowerCase().includes(q) || m.desc.toLowerCase().includes(q) || m.skills.some(s => s.toLowerCase().includes(q))
+  ));
+  setText('marketplace-count', published.length + ' mission' + (published.length > 1 ? 's' : '') + ' disponible' + (published.length > 1 ? 's' : ''));
+  renderMissionList('marketplace-list', published, 'marketplace');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MY MISSIONS
+// ══════════════════════════════════════════════════════════════════════════════
+function renderMyMissions() {
+  filterMyMissions(state.myMissionsFilter);
+}
+function filterMyMissions(filter, el) {
+  state.myMissionsFilter = filter;
+  if (el) { document.querySelectorAll('#my-missions-tabs .tab').forEach(t => t.classList.remove('active')); el.classList.add('active'); }
+  const u = state.user;
+  let list;
+  if (u.role === 'AGENT') {
+    list = state.missions.filter(m => m.agentId === u.id);
+  } else {
+    list = state.missions.filter(m => m.assignedTo === u.id || (m.status !== 'PUBLISHED' && m.assignedTo === u.id));
+  }
+  if (filter === 'active') list = list.filter(m => ['ASSIGNED','IN_PROGRESS','DELIVERED','PUBLISHED'].includes(m.status));
+  if (filter === 'done')   list = list.filter(m => ['COMPLETED','CANCELED'].includes(m.status));
+  renderMissionList('my-missions-list', list, 'mymissions');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MISSION CARDS
+// ══════════════════════════════════════════════════════════════════════════════
+function renderMissionList(containerId, missions, origin) {
+  const el = document.getElementById(containerId);
+  if (!missions.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>Aucune mission</p><small>Revenez bientôt</small></div>';
+    return;
+  }
+  el.innerHTML = missions.map(m => `
+    <div class="card card-clickable" onclick="openMission('${m.id}','${origin}')">
+      <div class="mission-row">
+        <div>
+          <div class="mission-title">${esc(m.title)}</div>
+          <div class="mission-desc">${esc(m.desc)}</div>
+        </div>
+        <div class="mission-meta">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${statusChip(m.status)}
+            ${priorityChip(m.priority)}
+          </div>
+          <div class="mission-budget">${m.budget} €</div>
+        </div>
+        <div style="font-size:12px;color:var(--text3)">${m.skills.slice(0,3).join(' · ')} · ${fmtDate(m.createdAt)}</div>
+      </div>
+    </div>`).join('');
+}
+
+function openMission(id, origin) {
+  state.currentMissionId = id;
+  state.detailOrigin = origin;
+  const m = state.missions.find(m => m.id === id);
+  if (!m) return;
+  const u = state.user;
+  setText('detail-title', m.title);
+  setText('detail-budget', m.budget + ' €  →  ' + (m.budget * 0.9).toFixed(0) + ' € pour le Payworker');
+  setText('detail-date', fmtDate(m.createdAt));
+  setText('detail-desc', m.desc);
+  document.getElementById('detail-status-chip').innerHTML = statusLabel(m.status);
+  document.getElementById('detail-status-chip').className = 'chip ' + statusChipClass(m.status);
+  const skillsEl = document.getElementById('detail-skills');
+  skillsEl.innerHTML = m.skills.map(s => `<span class="chip chip-purple">${esc(s)}</span>`).join('');
+  setText('detail-priority', priorityLabel(m.priority));
+  const assigneeSec = document.getElementById('detail-assignee-section');
+  if (m.assignedTo) {
+    assigneeSec.style.display = '';
+    setText('detail-assignee', m.assignedTo === u?.id ? 'Vous' : 'Un Payworker');
+  } else { assigneeSec.style.display = 'none'; }
+  const resultSec = document.getElementById('detail-result-section');
+  if (m.result) {
+    resultSec.style.display = '';
+    setText('detail-result-note', m.result);
+  } else { resultSec.style.display = 'none'; }
+  const actions = document.getElementById('detail-actions');
+  actions.innerHTML = '';
+  if (u?.role === 'PAYWORKER') {
+    if (m.status === 'PUBLISHED' && m.assignedTo === null) {
+      if (!u.stripeConnected) {
+        actions.innerHTML = '<div class="card" style="border-color:var(--orange);text-align:center"><p style="color:var(--text2);font-size:14px;margin-bottom:12px">Configurez Stripe pour accepter des missions</p><button class="btn btn-primary" onclick="connectStripe()">Connecter Stripe</button></div>';
+      } else {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="acceptMission('${id}')">✋ Accepter la mission</button>`;
+      }
+    } else if (m.status === 'ASSIGNED' && m.assignedTo === u.id) {
+      actions.innerHTML = `<button class="btn btn-primary" onclick="startMission('${id}')">▶️ Démarrer</button>`;
+    } else if (m.status === 'IN_PROGRESS' && m.assignedTo === u.id) {
+      actions.innerHTML = `<button class="btn btn-success" onclick="goDeliver('${id}')">📦 Livrer la mission</button>`;
+    } else if (m.status === 'DELIVERED' && m.assignedTo === u.id) {
+      actions.innerHTML = `<div class="card" style="text-align:center;background:var(--bg2)"><p style="color:var(--green);font-weight:600">✅ Livraison soumise — en attente de validation</p></div>`;
+    } else if (m.status === 'COMPLETED' && m.assignedTo === u.id) {
+      actions.innerHTML = `<div class="card" style="text-align:center;background:var(--bg2)"><p style="color:var(--green);font-weight:600">🎉 Mission terminée · ${(m.budget*0.9).toFixed(0)} € versés</p></div>`;
+    }
+  } else if (u?.role === 'AGENT') {
+    if (m.status === 'DELIVERED') {
+      actions.innerHTML = `
+        <button class="btn btn-success" onclick="approveMission('${id}')">✅ Approuver la livraison</button>
+        <button class="btn btn-danger btn-sm" onclick="requestChanges('${id}')">↩️ Demander des corrections</button>`;
+    } else if (m.status === 'PUBLISHED') {
+      actions.innerHTML = `<button class="btn btn-danger" onclick="cancelMission('${id}')">Annuler la mission</button>`;
+    }
+  }
+  showScreen('screen-mission-detail');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MISSION ACTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+function acceptMission(id) {
+  const m = getMission(id);
+  if (!m) return;
+  m.status = 'ASSIGNED';
+  m.assignedTo = state.user.id;
+  save(); openMission(id, state.detailOrigin);
+  toast('Mission acceptée ! 🎉 Démarrez quand vous êtes prêt.');
+}
+function startMission(id) {
+  const m = getMission(id);
+  if (!m) return;
+  m.status = 'IN_PROGRESS';
+  save(); openMission(id, state.detailOrigin);
+  toast('Mission démarrée ▶️');
+}
+function goDeliver(id) {
+  const m = getMission(id);
+  if (!m) return;
+  setText('deliver-mission-title', m.title);
+  setText('deliver-mission-budget', 'Vous recevrez ' + (m.budget * 0.9).toFixed(0) + ' €');
+  document.getElementById('deliver-note').value = '';
+  document.getElementById('deliver-url').value = '';
+  showScreen('screen-deliver');
+}
+function submitDelivery() {
+  const note = document.getElementById('deliver-note').value.trim();
+  const url = document.getElementById('deliver-url').value.trim();
+  if (!note) return toast('Décrivez ce que vous avez accompli');
+  const m = getMission(state.currentMissionId);
+  if (!m) return;
+  m.status = 'DELIVERED';
+  m.result = note + (url ? '\n\nLien : ' + url : '');
+  save();
+  toast('Livraison soumise ✅ L\'agent va la valider.');
+  showScreen('screen-mission-detail');
+  openMission(m.id, state.detailOrigin);
+}
+function approveMission(id) {
+  const m = getMission(id);
+  if (!m) return;
+  m.status = 'COMPLETED';
+  save(); openMission(id, state.detailOrigin);
+  toast('Mission approuvée 🎉 Paiement envoyé au Payworker.');
+}
+function requestChanges(id) {
+  const m = getMission(id);
+  if (!m) return;
+  m.status = 'IN_PROGRESS';
+  save(); openMission(id, state.detailOrigin);
+  toast('Corrections demandées — mission remise En cours.');
+}
+function cancelMission(id) {
+  const m = getMission(id);
+  if (!m) return;
+  m.status = 'CANCELED';
+  save(); goBackFromDetail();
+  toast('Mission annulée.');
+}
+function createMission() {
+  const title = document.getElementById('cm-title').value.trim();
+  const desc = document.getElementById('cm-desc').value.trim();
+  const budget = parseInt(document.getElementById('cm-budget').value) || 0;
+  const priority = document.getElementById('cm-priority').value;
+  const skills = document.getElementById('cm-skills').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const deadline = document.getElementById('cm-deadline').value;
+  if (!title || !desc || budget < 5) return toast('Remplissez le titre, la description et un budget ≥ 5 €');
+  const id = 'm' + Date.now();
+  state.missions.unshift({ id, title, desc, budget, priority, skills: skills.length ? skills : ['Général'], status: 'PUBLISHED', createdAt: new Date().toISOString(), assignedTo: null, result: null, agentId: state.user.id, deadline });
+  save();
+  ['cm-title','cm-desc','cm-budget','cm-skills'].forEach(i => { document.getElementById(i).value = ''; });
+  toast('Mission publiée 🚀 Budget de ' + budget + ' € bloqué.');
+  showScreen('screen-dashboard-agent');
+  refreshAgentDashboard();
+}
+function connectStripe() {
+  toast('⏳ Redirection Stripe Connect… (simulation)');
+  setTimeout(() => {
+    state.user.stripeConnected = true; save();
+    document.getElementById('stripe-banner').style.display = 'none';
+    document.getElementById('stripe-status-label').textContent = 'Connecté ✓';
+    document.getElementById('stripe-status-label').style.color = 'var(--green)';
+    toast('✅ Stripe Connect configuré !');
+  }, 1500);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROFILE
+// ══════════════════════════════════════════════════════════════════════════════
+function refreshProfile() {
+  const u = state.user;
+  setText('profile-name', u.name);
+  setText('profile-email', u.email);
+  setAvatarText('profile-avatar', u.name);
+  document.getElementById('profile-role-badge').innerHTML = u.role === 'AGENT'
+    ? '<span class="chip chip-orange">Agent IA</span>'
+    : '<span class="chip chip-purple">Payworker</span>';
+  const sl = document.getElementById('stripe-status-label');
+  sl.textContent = u.stripeConnected ? 'Connecté ✓' : 'Non configuré ›';
+  sl.style.color = u.stripeConnected ? 'var(--green)' : 'var(--orange)';
+  const apiSec = document.getElementById('apikey-profile-section');
+  const apiCard = document.getElementById('apikey-profile-card');
+  if (u.role === 'AGENT') { apiSec.style.display = ''; apiCard.style.display = ''; }
+  else { apiSec.style.display = 'none'; apiCard.style.display = 'none'; }
+}
+function editProfile()         { toast('Modification du profil (bientôt disponible)'); }
+function showNotifSettings()   { toast('Paramètres de notifications (bientôt)'); }
+function showLanguageSettings(){ toast('Langue : Français'); }
+function showHelp()            { toast('FAQ disponible sur app.aiworkpay.fr'); }
+function showAbout()           { toast('Aiworkpay v1.0.2-beta · Mode hors ligne'); }
+function copyApiKey()          { toast('Clé API copiée dans le presse-papiers'); }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+function getMission(id)            { return state.missions.find(m => m.id === id); }
+function setText(id, val)          { const el = document.getElementById(id); if (el) el.textContent = val; }
+function esc(s)                    { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function setAvatarText(id, name)   { const el = document.getElementById(id); if (el) el.textContent = name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase(); }
+
+function statusLabel(s)  { return ({PAYMENT_PENDING:'PAIEMENT',PUBLISHED:'PUBLIÉE',ASSIGNED:'ASSIGNÉE',IN_PROGRESS:'EN COURS',DELIVERED:'LIVRÉE',COMPLETED:'TERMINÉE',CANCELED:'ANNULÉE'})[s] || s; }
+function statusChipClass(s) { return ({PAYMENT_PENDING:'chip-gray',PUBLISHED:'chip-blue',ASSIGNED:'chip-orange',IN_PROGRESS:'chip-orange',DELIVERED:'chip-purple',COMPLETED:'chip-green',CANCELED:'chip-red'})[s] || 'chip-gray'; }
+function statusChip(s)   { return `<span class="chip ${statusChipClass(s)}">${statusLabel(s)}</span>`; }
+function priorityLabel(p){ return ({LOW:'🟢 Faible',MEDIUM:'🟡 Normale',HIGH:'🔴 Haute'})[p] || p; }
+function priorityChip(p) { const cls = ({LOW:'chip-green',MEDIUM:'chip-orange',HIGH:'chip-red'})[p]||'chip-gray'; return `<span class="chip ${cls}">${({LOW:'Faible',MEDIUM:'Normale',HIGH:'Haute'})[p]||p}</span>`; }
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════════════════
+load();
+if (state.user) { seedMissions(); document.getElementById('bottom-nav').style.display = 'flex'; enterApp(); }
+</script>
+</body>
+</html>

@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { apiError } from '@/lib/agentApi';
 import { publicAttachment } from '@/lib/missionView';
-import { csrfGuard } from '@/lib/csrfGuard';
 
 const MAX_RESULT_DATA_BYTES = 64 * 1024;
 
@@ -43,9 +42,6 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const csrf = csrfGuard(request);
-  if (csrf) return csrf;
-
   try {
     const session = await auth();
     if (!session?.user) {

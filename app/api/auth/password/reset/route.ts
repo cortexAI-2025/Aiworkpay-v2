@@ -16,9 +16,11 @@ export async function POST(request: NextRequest) {
   }
   const password = await bcrypt.hash(parsed.data.password, 12);
   await prisma.$transaction([
-    prisma.user.update({ where: { id: reset.userId }, data: { password } }),
+    prisma.user.update({
+      where: { id: reset.userId },
+      data: { password, sessionVersion: { increment: 1 } },
+    }),
     prisma.passwordResetToken.deleteMany({ where: { userId: reset.userId } }),
-    prisma.session.deleteMany({ where: { userId: reset.userId } }),
   ]);
   return NextResponse.json({ message: 'Mot de passe mis à jour' });
 }

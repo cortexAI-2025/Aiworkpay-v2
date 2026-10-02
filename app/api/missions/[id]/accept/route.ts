@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
-import { csrfGuard } from '@/lib/csrfGuard';
 
 export async function PUT(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const csrf = csrfGuard(request);
-  if (csrf) return csrf;
-
   try {
     const session = await auth();
     if (!session?.user) {

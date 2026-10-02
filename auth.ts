@@ -37,6 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
+        if (String(credentials.password).length > 128) return null;
         const user = await prisma.user.findUnique({
           where: { email: (credentials.email as string).trim().toLowerCase() },
         });
@@ -49,18 +50,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id!;
-        token.role = (user as { role?: string }).role ?? 'PAYWORKER';
-      }
-      // Sync role from DB when token is missing it (e.g. after OAuth sign-up)
-      if (token.id && !token.role) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { role: true },
-        });
-        token.role = dbUser?.role ?? 'PAYWORKER';
-      }
+      if (user) token.id = user.id!;
+      if (!token.id) return null;
+      // Role and session version always come from the DB, so a demotion or a
+      // password reset takes effect on the next request instead of at expiry.
+      const dbUser = await prisma.user.findUnique({
+        where: { id: token.id as string },
+        select: { role: true, sessionVersion: true },
+      });
+      if (!dbUser) return null;
+      if (user) token.sv = dbUser.sessionVersion;
+      if ((token.sv ?? 0) !== dbUser.sessionVersion) return null;
+      token.role = dbUser.role;
       return token;
     },
     async session({ session, token }) {

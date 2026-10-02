@@ -103,15 +103,17 @@ model PasswordResetToken {
 // ─── App models ───────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(uuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String? // null for OAuth users
-  phone         String?   @unique
-  phoneVerified Boolean   @default(false)
-  role          Role      @default(PAYWORKER)
+  id             String    @id @default(uuid())
+  name           String?
+  email          String?   @unique
+  emailVerified  DateTime?
+  image          String?
+  password       String? // null for OAuth users
+  phone          String?   @unique
+  phoneVerified  Boolean   @default(false)
+  role           Role      @default(PAYWORKER)
+  // Bumped on password reset: JWTs carrying an older value are rejected
+  sessionVersion Int       @default(0)
 
   // Stripe Connect: payout account for Payworkers
   stripeAccountId        String?
@@ -130,6 +132,8 @@ model User {
   missionsAssigned    Mission[]            @relation("MissionAssignedTo")
   transactions        Transaction[]
   passwordResetTokens PasswordResetToken[]
+
+  @@index([stripeAccountId])
 }
 
 model ApiKey {
@@ -212,6 +216,9 @@ model Mission {
   transactions Transaction[]
 
   @@unique([createdByApiKeyId, idempotencyKey])
+  @@index([status, createdAt])
+  @@index([assignedToUserId, status])
+  @@index([createdByApiKeyId, createdAt])
 }
 
 model MissionAttachment {
@@ -250,6 +257,9 @@ model Transaction {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([missionId])
 }
 
 // Fixed-window counters shared by every instance of the app (rate limiting)

@@ -6,7 +6,9 @@ import { hit, clientIp, LIMITS } from '@/lib/rateLimit';
 
 const signupSchema = z.object({
   email: z.string().email('Email invalide'),
-  password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères'),
+  password: z.string()
+    .min(8, 'Le mot de passe doit contenir au moins 8 caractères')
+    .max(128, 'Le mot de passe ne doit pas dépasser 128 caractères'),
 });
 
 export async function POST(request: NextRequest) {

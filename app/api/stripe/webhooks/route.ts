@@ -11,16 +11,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Signature manquante' }, { status: 400 });
   }
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!webhookSecret) {
+  // Platform events and Connect (connected accounts) events are sent by two
+  // distinct Stripe endpoints, each with its own signing secret.
+  const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET]
+    .filter((s): s is string => !!s);
+  if (secrets.length === 0) {
     return NextResponse.json({ error: 'STRIPE_WEBHOOK_SECRET non configuré' }, { status: 500 });
   }
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err);
+  let event: Stripe.Event | null = null;
+  for (const secret of secrets) {
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, secret);
+      break;
+    } catch {
+      // try the next secret
+    }
+  }
+  if (!event) {
+    console.error('Webhook signature verification failed');
     return NextResponse.json({ error: 'Signature invalide' }, { status: 400 });
   }
 
@@ -50,6 +59,13 @@ export async function POST(request: NextRequest) {
       case 'transfer.created': {
         const transfer = event.data.object as Stripe.Transfer;
         await handleTransferCreated(transfer);
+        break;
+      }
+
+      // ── Connect: Payworker account capabilities changed ───────────────────
+      case 'account.updated': {
+        const account = event.data.object as Stripe.Account;
+        await handleAccountUpdated(account);
         break;
       }
 
@@ -163,3 +179,13 @@ async function handleTransferCreated(transfer: Stripe.Transfer) {
   });
 }
 
+async function handleAccountUpdated(account: Stripe.Account) {
+  const onboarded = !!account.details_submitted && account.capabilities?.transfers === 'active';
+  const { count } = await prisma.user.updateMany({
+    where: { stripeAccountId: account.id, stripeAccountOnboarded: !onboarded },
+    data: { stripeAccountOnboarded: onboarded },
+  });
+  if (count > 0 && !onboarded) {
+    console.warn(`Connect account ${account.id} can no longer receive transfers`);
+  }
+}

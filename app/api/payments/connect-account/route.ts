@@ -73,13 +73,13 @@ export async function GET(request: NextRequest) {
 
     const account = await stripe.accounts.retrieve(user.stripeAccountId);
     const onboarded =
-      account.details_submitted &&
+      !!account.details_submitted &&
       account.capabilities?.transfers === 'active';
 
-    if (onboarded && !user.stripeAccountOnboarded) {
+    if (onboarded !== user.stripeAccountOnboarded) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { stripeAccountOnboarded: true },
+        data: { stripeAccountOnboarded: onboarded },
       });
     }
 

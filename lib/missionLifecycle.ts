@@ -148,8 +148,9 @@ export async function retryMissionPayout(missionId: string): Promise<{ status: '
     }, { idempotencyKey: `mission_payout_${missionId}` });
     await prisma.transaction.update({ where: { id: payout.id }, data: { status: 'SUCCEEDED', stripeTransferId: transfer.id } });
     return { status: 'SUCCEEDED' };
-  } catch {
+  } catch (error) {
     // Keep the booked payout pending, including when the network outcome is uncertain.
+    console.error(`Payout transfer failed for mission ${missionId}:`, error);
     return { status: 'PENDING', reason: 'TRANSFER_UNAVAILABLE' };
   }
 }
